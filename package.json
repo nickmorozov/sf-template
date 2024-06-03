@@ -1,0 +1,59 @@
+{
+    "name": "sf-template",
+    "private": true,
+    "version": "1.0.0",
+    "description": "sf-template",
+    "scripts": {
+        "lint": "npm run lint:lwc && npm run lint:apex",
+        "lint:lwc": "eslint src/**/lwc",
+        "lint:apex": "sf scanner run",
+        "test": "npm run test:unit",
+        "test:unit": "sfdx-lwc-jest",
+        "test:unit:watch": "sfdx-lwc-jest --watch",
+        "test:unit:debug": "sfdx-lwc-jest --debug",
+        "test:unit:coverage": "sfdx-lwc-jest --coverage",
+        "prettier": "prettier --write \"**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\"",
+        "prettier:verify": "prettier --list-different \"**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\"",
+        "prettier:format": "./node_modules/.bin/prettier --write '**/*'",
+        "prettier:format:apex": "./node_modules/.bin/prettier --write '**/*.{trigger,cls}'",
+        "prettier:format:json": "./node_modules/.bin/prettier --write '**/*.{json,yml,yaml}'",
+        "prettier:format:visualforce": "./node_modules/.bin/prettier --write '**/*.{cmp,page,component}'",
+        "prettier:format:lwc": "./node_modules/.bin/prettier --write '**/lwc/**/*.{html,js}'",
+        "postinstall": "husky install",
+        "precommit": "lint-staged"
+    },
+    "lint-staged": {
+        "**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}": [
+            "prettier --write"
+        ],
+        "**/{aura,lwc}/**": [
+            "eslint"
+        ],
+        "**/*.{cls,trigger,page,component}": [
+            "sf scanner run"
+        ]
+    },
+    "devDependencies": {
+        "@lwc/eslint-plugin-lwc": "latest",
+        "@prettier/plugin-xml": "latest",
+        "@salesforce/eslint-config-lwc": "latest",
+        "@salesforce/eslint-plugin-aura": "latest",
+        "@salesforce/eslint-plugin-lightning": "latest",
+        "@salesforce/sfdx-lwc-jest": "latest",
+        "@salesforce/sfdx-scanner": "latest",
+        "@types/jest": "latest",
+        "@types/node": "latest",
+        "eslint": "latest",
+        "eslint-config-prettier": "latest",
+        "eslint-plugin-import": "latest",
+        "eslint-plugin-jest": "latest",
+        "eslint-plugin-prettier": "latest",
+        "husky": "latest",
+        "lint-staged": "latest",
+        "prettier": "latest",
+        "prettier-eslint": "latest",
+        "prettier-plugin-apex": "latest",
+        "stylelint": "latest",
+        "stylelint-prettier": "latest"
+    }
+}

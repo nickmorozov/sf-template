@@ -1,0 +1,23 @@
+trailingComma: 'es5' # Print trailing commas wherever possible when multi-line
+tabWidth: 4 # The number of spaces per indentation-level
+singleQuote: true # Unified usage of single quotes across all languages (where possible)
+printWidth: 180
+embeddedLanguageFormatting: auto
+endOfLine: lf
+apexInsertFinalNewline: false # Match `sf source retrieve` format
+plugins:
+    - prettier-plugin-apex
+    - '@prettier/plugin-xml'
+overrides:
+    - files: '**/lwc/**/*.html'
+      options:
+          parser: 'lwc'
+    - files: '**/*.{cmp,page,component}'
+      options:
+          parser: 'html'
+    - files: '**/*.{trigger,cls,page}'
+      options:
+          parser: 'apex'
+    - files: '**/*.{apex,soql}'
+      options:
+          parser: 'apex-anonymous'
