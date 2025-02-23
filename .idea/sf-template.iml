@@ -27,5 +27,8 @@
     </content>
     <orderEntry type="jdk" jdkName="IlluminatedCloud (sf-template/sf-template-prod)" jdkType="IlluminatedCloud" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" name="sf-template/lwc_types" level="project" />
+    <orderEntry type="library" name="node" level="project" />
+    <orderEntry type="library" name="jest" level="project" />
   </component>
 </module>

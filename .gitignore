@@ -25,7 +25,9 @@ yarn-error.log*
 
 # Dependency directories
 node_modules/
-package-lock.json
+
+# Git hooks
+.husky/
 
 # Eslint cache
 .eslintcache
@@ -45,7 +47,9 @@ $RECYCLE.BIN/
 **/venv/
 
 # Added by Illuminated Cloud
+/.illuminatedCloud/
 /IlluminatedCloud/
 /out/
-
-.husky/
+/target/
+**/tsconfig*.json
+**/*.tsbuildinfo
