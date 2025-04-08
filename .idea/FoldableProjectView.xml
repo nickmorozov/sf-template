@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+    <component name="FoldableProjectSettings">
+        <option name="RULES">
+            <list>
+                <Rule>
+                    <option name="foreground" value="-12938992" />
+                    <option name="name" value="Markdown" />
+                    <option name="pattern" value="*.md LICENSE" />
+                </Rule>
+                <Rule>
+                    <option name="foreground" value="-5425610" />
+                    <option name="name" value="Configs" />
+                    <option name="pattern" value="package.json package-lock.json" />
+                </Rule>
+                <Rule>
+                    <option name="foreground" value="-14929498" />
+                    <option name="name" value="SF DX" />
+                    <option name="pattern" value=".env .sfdx-scanner.json sfdx-project.json .forceignore launch.json" />
+                </Rule>
+                <Rule>
+                    <option name="foreground" value="-5224163" />
+                    <option name="name" value="Git" />
+                    <option name="pattern" value=".gitignore .huskyrc" />
+                </Rule>
+                <Rule>
+                    <option name="foreground" value="-14570309" />
+                    <option name="name" value="Lint" />
+                    <option name="pattern" value=".eslintignore .eslintrc .prettierignore .prettierrc.yml .stylelintrc aura.eslintrc.json lint-staged.config.js lwc.eslint.json jest.config.js" />
+                </Rule>
+            </list>
+        </option>
+    </component>
+</project>
