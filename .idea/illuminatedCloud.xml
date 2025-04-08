@@ -4,10 +4,10 @@
     <option name="connections">
       <list>
         <IlluminatedCloudConnection>
-          <option name="connectionName" value="isys-uat" />
+          <option name="connectionName" value="sf-template-dev" />
           <option name="connectionType" value="OAUTH" />
-          <option name="defaultModuleName" value="isys" />
-          <option name="offlineSymbolTablePath" value="$PROJECT_DIR$/IlluminatedCloud/isys_uat/OfflineSymbolTable.zip" />
+          <option name="defaultModuleName" value="sf-template" />
+          <option name="offlineSymbolTablePath" value="$PROJECT_DIR$/IlluminatedCloud/sf_template_dev/OfflineSymbolTable.zip" />
         </IlluminatedCloudConnection>
       </list>
     </option>
