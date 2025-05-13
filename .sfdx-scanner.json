@@ -1,22 +1,17 @@
 {
-  "targetPatterns": [
-    "src/**/*.{cls}",
-    "src/**/*.{trigger}",
-    "src/**/*.{page}",
-    "src/**/*.{component}"
-  ],
-  "rules": {
-    "apex": [
-      {
-        "engine": "pmd",
-        "ruleset": "category/apex/bestpractices.xml"
-      }
-    ],
-    "visualforce": [
-      {
-        "engine": "pmd",
-        "ruleset": "category/visualforce/security.xml"
-      }
-    ]
-  }
+    "targetPatterns": ["src/**/*.{cls}", "src/**/*.{trigger}", "src/**/*.{page}", "src/**/*.{component}"],
+    "rules": {
+        "apex": [
+            {
+                "engine": "pmd",
+                "ruleset": "category/apex/bestpractices.xml"
+            }
+        ],
+        "visualforce": [
+            {
+                "engine": "pmd",
+                "ruleset": "category/visualforce/security.xml"
+            }
+        ]
+    }
 }
