@@ -29,16 +29,11 @@ mv "${root_dir}/.idea/sf-template.iml" "${root_dir}/.idea/${replacement}.iml"
 find "${root_dir}" -type d -name '.git' -prune -o  -type f -not -name "${script_name}" -exec sed -i '' -e "s/sf-template/${replacement}/g" {} \;
 find "${root_dir}" -type d -name '.git' -prune -o  -type f -not -name "${script_name}" -exec sed -i '' -e "s/sf_template/${replacement//-/_}/g" {} \;
 
-# Rename the module directory
-find "${root_dir}" -type d -name '.git' -prune -o  -type f -not -name "${script_name}" -exec sed -i '' -e "s/new-module/${module_name}/g" {} \;
-mv "src/main/new-module" "src/main/${module_name}"
-
-# Remove temporary files - we only needed folders
-rm -f "src/main/default/.gitkeep"
-rm -f "src/main/new-module/.gitkeep"
+# Create the module directory
+mkdir "src/main/${module_name}"
 
 # Report the changes
-echo "Project renamed to ${replacement}, module renamed to ${module_name}"
+echo "Project renamed to ${replacement}, module created as ${module_name}"
 
 # Remove the script and commit changes
 rm -f "${script_name}"
