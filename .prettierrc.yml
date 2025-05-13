@@ -15,7 +15,7 @@ overrides:
     - files: '**/*.{cmp,page,component}'
       options:
           parser: 'html'
-    - files: '**/*.{trigger,cls,page}'
+    - files: '**/*.{trigger,cls}'
       options:
           parser: 'apex'
     - files: '**/*.{apex,soql}'
