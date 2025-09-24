@@ -1,0 +1,12 @@
+npm test
+
+# Strip final newlines from all staged files
+files=$(git diff --cached --name-only --diff-filter=ACM)
+
+for file in $files; do
+  if [ -f "$file" ]; then
+    # Remove all trailing newlines at EOF
+    sed -i '' -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file"
+    git add "$file"
+  fi
+done
