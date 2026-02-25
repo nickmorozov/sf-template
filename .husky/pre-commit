@@ -1,12 +1,35 @@
-npm test
+# ── Branch name guard ──────────────────────────────────────────────
+# Prevent non-admin commits directly to protected branches.
+# Admins: use "git commit --no-verify" or set ADMIN_OVERRIDE=1 to bypass.
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+PROTECTED_BRANCHES="main dev qa uat"
 
-# Strip final newlines from all staged files
-files=$(git diff --cached --name-only --diff-filter=ACM)
-
-for file in $files; do
-  if [ -f "$file" ]; then
-    # Remove all trailing newlines at EOF
-    sed -i '' -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$file"
-    git add "$file"
-  fi
+for protected in $PROTECTED_BRANCHES; do
+    if [ "$BRANCH" = "$protected" ]; then
+        if [ "$ADMIN_OVERRIDE" = "1" ]; then
+            echo "⚠️  Admin override: committing directly to '$BRANCH'."
+            break
+        fi
+        echo ""
+        echo "❌ Direct commits to '$BRANCH' are not allowed."
+        echo "   Create a feature/* or hotfix/* branch instead:"
+        echo ""
+        echo "   git checkout -b feature/my-change"
+        echo ""
+        echo "   Admins: use --no-verify or ADMIN_OVERRIDE=1 to bypass."
+        echo ""
+        exit 1
+    fi
 done
+
+# ── Remove non-essential <userPermissions> from staged profile XMLs ──
+# Keeps only: AuthorApex, InstallPackaging, InboundMigrationToolsUser,
+# ManageAuthProviders, ModifyAllData, ModifyMetadata
+for f in $(git diff --cached --name-only --diff-filter=AM | grep -E 'profiles/.*\.profile-meta\.xml$'); do
+  [ -f "$f" ] || continue
+  perl -0777 -pe 's{(<userPermissions>.*?</userPermissions>\n)}{$1 =~ /AuthorApex|InstallPackaging|InboundMigrationToolsUser|ManageAuthProviders|ModifyAllData|ModifyMetadata/ ? $1 : ""}gse' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  git add "$f"
+done
+
+# ── Run lint-staged (prettier, eslint, sf scanner) ──
+npx lint-staged

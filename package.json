@@ -1,63 +1,83 @@
 {
-  "name": "sf-template",
-  "private": true,
-  "version": "1.0.0",
-  "description": "sf-template",
-  "scripts": {
-    "lint": "npm run lint:lwc && npm run lint:apex",
-    "lint:lwc": "eslint src/**/lwc",
-    "lint:apex": "sf scanner run",
-    "lint:slds": "npx @salesforce-ux/slds-linter lint \"src\"",
-    "lint:slds:report": "npx @salesforce-ux/slds-linter report \"src\"",
-    "lint:slds:fix": "npx @salesforce-ux/slds-linter lint \"src\" --fix",
-    "test": "npm run test:unit",
-    "test:unit": "sfdx-lwc-jest",
-    "test:unit:watch": "sfdx-lwc-jest --watch",
-    "test:unit:debug": "sfdx-lwc-jest --debug",
-    "test:unit:coverage": "sfdx-lwc-jest --coverage",
-    "prettier": "prettier --write \"src/**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\"",
-    "prettier:verify": "prettier --list-different \"src/**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\"",
-    "prettier:format": "./node_modules/.bin/prettier --write 'src/**/*'",
-    "prettier:format:apex": "./node_modules/.bin/prettier --write 'src/**/*.{trigger,cls}'",
-    "prettier:format:json": "./node_modules/.bin/prettier --write 'src/**/*.{json,yml,yaml}'",
-    "prettier:format:visualforce": "./node_modules/.bin/prettier --write 'src/**/*.{cmp,page,component}'",
-    "prettier:format:lwc": "./node_modules/.bin/prettier --write 'src/**/lwc/**/*.{html,js}'",
-    "postinstall": "husky install && husky init",
-    "precommit": "lint-staged",
-    "prepare": "husky"
-  },
-  "lint-staged": {
-    "**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}": [
-      "prettier --write"
-    ],
-    "**/{aura,lwc}/**": [
-      "eslint"
-    ],
-    "**/*.{cls,trigger,page,component}": [
-      "sf scanner run"
-    ]
-  },
-  "devDependencies": {
-    "@lwc/eslint-plugin-lwc": "latest",
-    "@prettier/plugin-xml": "latest",
-    "@salesforce/eslint-config-lwc": "latest",
-    "@salesforce/eslint-plugin-aura": "latest",
-    "@salesforce/eslint-plugin-lightning": "latest",
-    "@salesforce/sfdx-lwc-jest": "latest",
-    "@salesforce/sfdx-scanner": "latest",
-    "@types/jest": "latest",
-    "@types/node": "latest",
-    "eslint": "latest",
-    "eslint-config-prettier": "latest",
-    "eslint-plugin-import": "latest",
-    "eslint-plugin-jest": "latest",
-    "eslint-plugin-prettier": "latest",
-    "husky": "latest",
-    "lint-staged": "latest",
-    "prettier": "latest",
-    "prettier-eslint": "latest",
-    "prettier-plugin-apex": "latest",
-    "stylelint": "latest",
-    "stylelint-prettier": "latest"
-  }
+    "name": "sf-template",
+    "private": true,
+    "version": "1.0.0",
+    "description": "Salesforce project template",
+    "engines": {
+        "node": ">=20.x",
+        "npm": ">=10.x"
+    },
+    "scripts": {
+        "lint": "eslint **/{aura,lwc}/**/*.js",
+        "lint:slds": "npx @salesforce-ux/slds-linter lint \"src\"",
+        "lint:slds:fix": "npx @salesforce-ux/slds-linter lint \"src\" --fix",
+        "test": "npm run test:unit",
+        "test:unit": "sfdx-lwc-jest",
+        "test:unit:watch": "sfdx-lwc-jest --watch",
+        "test:unit:debug": "sfdx-lwc-jest --debug",
+        "test:unit:coverage": "sfdx-lwc-jest --coverage",
+        "prettier": "prettier --write \"src/**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\"",
+        "prettier:verify": "prettier --check \"src/**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\"",
+        "precommit": "lint-staged",
+        "prepare": "husky || true",
+        "update": "npm update",
+        "source:validate": "sf project deploy start --dry-run --wait 999",
+        "source:push": "sf project deploy start --wait 999",
+        "source:pull": "sf project retrieve start --wait 999",
+        "source:diff": "sf project deploy preview && sf project retrieve preview",
+        "source:reset": "sf project reset tracking --no-prompt",
+        "org:list": "sf org list --all --verbose",
+        "org:open": "sf org open",
+        "sync": "node sf-template/sync.js",
+        "sync:preview": "node sf-template/sync.js --dry-run",
+        "sync:update": "git submodule update --remote sf-template && node sf-template/sync.js",
+        "data": "node --disable-warning=DEP0190 data-tool/main.js",
+        "data:export": "EXPORT_ALIAS=\"${EXPORT_ALIAS:-cg-prod}\" npm run data -- export",
+        "data:export:verbose": "npm run data:export -- --verbose",
+        "data:import": "IMPORT_ALIAS=\"${IMPORT_ALIAS:-cg-cgpm}\" npm run data -- import",
+        "data:import:verbose": "npm run data:import -- --verbose",
+        "data:import:sim": "npm run data:import -- --simulation --verbose"
+    },
+    "lint-staged": {
+        "**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}": [
+            "prettier --write"
+        ],
+        "**/{aura,lwc}/**/*.js": [
+            "eslint"
+        ],
+        "**/lwc/**/*.test.js": [
+            "sfdx-lwc-jest -- --bail --findRelatedTests --passWithNoTests"
+        ],
+        "**/*.{cls,trigger,page,component}": [
+            "sf scanner run"
+        ]
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.39.0",
+        "@html-eslint/eslint-plugin": "^0.57.0",
+        "@html-eslint/parser": "^0.57.0",
+        "@lwc/eslint-plugin-lwc": "^3.3.0",
+        "@prettier/plugin-xml": "^3.4.2",
+        "@salesforce-ux/eslint-plugin-slds": "^0.5.3",
+        "@salesforce-ux/stylelint-plugin-slds": "^0.5.3",
+        "@salesforce/eslint-config-lwc": "^4.1.2",
+        "@salesforce/eslint-plugin-aura": "^3.0.0",
+        "@salesforce/eslint-plugin-lightning": "^2.0.0",
+        "@salesforce/sfdx-lwc-jest": "^7.1.2",
+        "@salesforce/sfdx-scanner": "^4.12.0",
+        "@types/jest": "^30.0.0",
+        "@types/node": "^25.0.0",
+        "eslint": "^9.39.0",
+        "eslint-plugin-import": "^2.32.0",
+        "eslint-plugin-jest": "^29.15.0",
+        "globals": "^16.5.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.2.0",
+        "prettier": "^3.8.1",
+        "prettier-plugin-apex": "^2.2.6",
+        "sfdx-git-delta": "^6.31.0",
+        "stylelint": "^16.10.0",
+        "typescript": "^5.9.0",
+        "typescript-eslint": "^8.56.0"
+    }
 }

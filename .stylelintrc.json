@@ -1,0 +1,27 @@
+{
+    "plugins": ["@salesforce-ux/stylelint-plugin-slds"],
+    "overrides": [
+        {
+            "files": ["**/*.css", "**/*.scss"],
+            "customSyntax": "postcss",
+            "rules": {
+                "length-zero-no-unit": [true, { "severity": "warning" }],
+                "slds/no-slds-class-overrides": [true, { "severity": "warning" }],
+                "slds/no-important-tag": [false, { "severity": "warning" }],
+                "slds/no-hardcoded-values-slds1": [false, { "severity": "error" }],
+                "slds/no-hardcoded-values-slds2": [true, { "severity": "warning" }],
+                "slds/no-deprecated-tokens-slds1": [false, { "severity": "error" }],
+                "slds/lwc-token-to-slds-hook": [false, { "severity": "warning" }],
+                "slds/enforce-bem-usage": [false, { "severity": "warning" }],
+                "slds/no-deprecated-slds-classes": [false, { "severity": "warning" }],
+                "slds/no-slds-private-var": [true, { "severity": "warning" }],
+                "slds/no-calc-function": [false, { "severity": "warning" }],
+                "slds/enforce-sds-to-slds-hooks": [true, { "severity": "warning" }],
+                "slds/reduce-annotations": [true, { "severity": "warning" }],
+                "slds/no-unsupported-hooks-slds2": [true, { "severity": "warning" }],
+                "slds/no-slds-var-without-fallback": [true, { "severity": "warning" }]
+            },
+            "sourceMap": false
+        }
+    ]
+}

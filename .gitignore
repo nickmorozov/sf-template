@@ -26,8 +26,8 @@ yarn-error.log*
 # Dependency directories
 node_modules/
 
-# Git hooks
-.husky/
+# Husky internals (hooks themselves should be committed)
+.husky/_/
 
 # Eslint cache
 .eslintcache
