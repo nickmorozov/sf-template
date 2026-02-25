@@ -53,6 +53,7 @@ const TEMPLATE_MANAGED_SCRIPTS = [
     'org:list',
     'org:open',
     'sync',
+    'sync:modules',
     'sync:preview',
     'sync:update',
     'data',
