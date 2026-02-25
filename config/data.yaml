@@ -1,0 +1,105 @@
+# CGPM (CG Project Management) Data Configuration
+# Used by sf-data-manager to export/import Salesforce data via SFDMU
+#
+# No salesOrg section — data is not partitioned by sales organization.
+
+name: cgpm
+
+dataDir: data
+tmpDir: tmp
+
+objects:
+    - objectName: Account
+      externalId: Name
+      fields: readonly_false
+      orderBy: Name
+      isMaster: false
+
+    - objectName: Contact
+      externalId: 'FirstName;LastName'
+      fields: readonly_false
+      orderBy: 'LastName, FirstName'
+      isMaster: false
+
+    - objectName: cgpm__Allowed_Child_Type__c
+      externalId: Name
+      fields: readonly_false
+      orderBy: Name
+      hierarchy:
+          childField: Name
+          parentField: cgpm__Parent_Work_Item_Template__r.Name
+          parentIdField: cgpm__Parent_Work_Item_Template__c
+
+    - objectName: cgpm__Project__c
+      externalId: 'cgpm__Project_Template__r.Name;Name'
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Project_Role__c
+      externalId: 'cgpm__Resource_Type_Template__r.Name;cgpm__Project__r.Name;Name'
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Project_Template__c
+      externalId: Name
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Project_Template_Work_Item_Type__c
+      externalId: 'cgpm__Project_Template__r.Name;cgpm__Work_Item_Template__r.Name;Name'
+      fields: readonly_false
+      orderBy: 'cgpm__Project_Template__r.Name, Name'
+
+    - objectName: cgpm__Resource_Assignment__c
+      externalId: 'cgpm__Resource_User__r.Email;cgpm__Project__r.Name;cgpm__Resource_Type_Template__r.Name;Name'
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Resource_Type_Template__c
+      externalId: Name
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Template_Action_Config__c
+      externalId: 'cgpm__Work_Item_Template__r.Name;Name'
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Template_Field_Config__c
+      externalId: 'cgpm__Work_Item_Template__r.Name;Name'
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Template_Status_Config__c
+      externalId: 'cgpm__Work_Item_Template__r.Name;cgpm__Project_Template__r.Name;Name'
+      fields: readonly_false
+      orderBy: cgpm__Order__c
+
+    - objectName: cgpm__Time_Entry__c
+      externalId: 'cgpm__Project__r.Name;cgpm__Resource_Assignment__r.Name;Name'
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Work_Item__c
+      externalId: 'cgpm__Project__r.Name;cgpm__Work_Item_Template__r.Name;Name'
+      fields: readonly_false
+      orderBy: Name
+      hierarchy:
+          childField: Name
+          parentField: cgpm__Parent_Work_Item__r.Name
+          parentIdField: cgpm__Parent_Work_Item__c
+
+    - objectName: cgpm__Work_Item_Assignment__c
+      externalId: 'cgpm__Work_Item__r.Name;cgpm__Resource_Assignment__r.Name;Name'
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Work_Item_Note__c
+      externalId: 'cgpm__Work_Item__r.Name;Name'
+      fields: readonly_false
+      orderBy: Name
+
+    - objectName: cgpm__Work_Item_Template__c
+      externalId: Name
+      fields: readonly_false
+      orderBy: Name
