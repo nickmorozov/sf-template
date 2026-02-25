@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const { execSync } = require('child_process');
 
 const TEMPLATE_DIR = __dirname;
 const PROJECT_DIR = path.resolve(TEMPLATE_DIR, '..');
@@ -22,15 +23,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE = process.argv.includes('--force');
 
 // ── Files to copy verbatim ──────────────────────────────────────────
-const COPY_FILES = [
-    '.prettierrc.yml',
-    '.editorconfig',
-    '.npmrc',
-    '.prettierignore',
-    '.stylelintrc.json',
-    'eslint.config.mjs',
-    'jest.config.js',
-];
+const COPY_FILES = ['.prettierrc.yml', '.editorconfig', '.npmrc', '.prettierignore', '.stylelintrc.json', 'eslint.config.mjs', 'jest.config.js'];
 
 const COPY_HOOKS = ['.husky/pre-commit'];
 
@@ -38,16 +31,41 @@ const COPY_HOOKS = ['.husky/pre-commit'];
 // These are overwritten from the template. Everything else is preserved.
 const TEMPLATE_MANAGED_PKG_FIELDS = ['engines', 'lint-staged'];
 
-// Scripts managed by the template (project-specific scripts like data:*, open:* are preserved)
+// Scripts managed by the template (project-specific scripts like open:* are preserved)
 const TEMPLATE_MANAGED_SCRIPTS = [
-    'lint', 'lint:slds', 'lint:slds:fix',
-    'test:unit', 'test:unit:watch', 'test:unit:debug', 'test:unit:coverage',
-    'prettier', 'prettier:verify',
-    'precommit', 'prepare', 'update',
-    'source:validate', 'source:push', 'source:pull', 'source:diff', 'source:reset',
-    'org:list', 'org:open',
-    'sync', 'sync:preview', 'sync:update',
+    'lint',
+    'lint:slds',
+    'lint:slds:fix',
+    'test:unit',
+    'test:unit:watch',
+    'test:unit:debug',
+    'test:unit:coverage',
+    'prettier',
+    'prettier:verify',
+    'precommit',
+    'prepare',
+    'update',
+    'source:validate',
+    'source:push',
+    'source:pull',
+    'source:diff',
+    'source:reset',
+    'org:list',
+    'org:open',
+    'sync',
+    'sync:preview',
+    'sync:update',
+    'data',
+    'data:export',
+    'data:export:verbose',
+    'data:import',
+    'data:import:verbose',
+    'data:import:sim',
 ];
+
+// ── sf-data-manager submodule ───────────────────────────────────────
+const DATA_MANAGER_REPO = 'git@github.com:nickmorozov/sf-data-manager.git';
+const DATA_MANAGER_DIR = 'sf-data-manager';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -61,7 +79,12 @@ function sortKeys(obj) {
 
 function ask(question) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise((resolve) => rl.question(question, (answer) => { rl.close(); resolve(answer); }));
+    return new Promise((resolve) =>
+        rl.question(question, (answer) => {
+            rl.close();
+            resolve(answer);
+        })
+    );
 }
 
 // ── Diff reporting ───────────────────────────────────────────────────
@@ -188,16 +211,7 @@ function syncPackageJson() {
 
 // ── Clean up legacy files ────────────────────────────────────────────
 
-const LEGACY_FILES = [
-    '.huskyrc',
-    '.stylelintrc',
-    'aura.eslintrc.json',
-    'lwc.eslint.json',
-    '.eslintrc',
-    '.eslintrc.json',
-    '.eslintignore',
-    'lint-staged.config.js',
-];
+const LEGACY_FILES = ['.huskyrc', '.stylelintrc', 'aura.eslintrc.json', 'lwc.eslint.json', '.eslintrc', '.eslintrc.json', '.eslintignore', 'lint-staged.config.js'];
 
 function cleanLegacy() {
     for (const relPath of LEGACY_FILES) {
@@ -228,6 +242,51 @@ function fixGitignore() {
     }
 }
 
+// ── sf-data-manager submodule + workspace ────────────────────────────
+
+function syncDataManager() {
+    const dmDir = path.join(PROJECT_DIR, DATA_MANAGER_DIR);
+
+    // 1. Add submodule if not present
+    if (!fs.existsSync(dmDir)) {
+        console.log(`  + ${DATA_MANAGER_DIR}/ (git submodule)`);
+        changes.push({ type: 'create', file: DATA_MANAGER_DIR });
+
+        if (!DRY_RUN) {
+            execSync(['git', 'submodule', 'add', DATA_MANAGER_REPO, DATA_MANAGER_DIR].join(' '), { cwd: PROJECT_DIR, stdio: 'pipe' });
+        }
+    }
+
+    // 2. Ensure workspaces includes sf-data-manager
+    const projectPkgPath = path.join(PROJECT_DIR, 'package.json');
+    if (!fs.existsSync(projectPkgPath)) return;
+
+    const proj = readJson(projectPkgPath);
+    const workspaces = proj.workspaces || [];
+
+    if (!workspaces.includes(DATA_MANAGER_DIR)) {
+        workspaces.push(DATA_MANAGER_DIR);
+        proj.workspaces = workspaces;
+        reportPkgChange('workspaces', `+${DATA_MANAGER_DIR}`);
+
+        if (!DRY_RUN) {
+            fs.writeFileSync(projectPkgPath, JSON.stringify(proj, null, 4) + '\n');
+        }
+    }
+
+    // 3. Clean up legacy data-tool workspace reference
+    const dtIdx = workspaces.indexOf('data-tool');
+    if (dtIdx !== -1) {
+        workspaces.splice(dtIdx, 1);
+        proj.workspaces = workspaces;
+        reportPkgChange('workspaces', '-data-tool (legacy)');
+
+        if (!DRY_RUN) {
+            fs.writeFileSync(projectPkgPath, JSON.stringify(proj, null, 4) + '\n');
+        }
+    }
+}
+
 // ── Main ─────────────────────────────────────────────────────────────
 
 async function main() {
@@ -236,6 +295,7 @@ async function main() {
     console.log(`\nSyncing ${templateName}/ → ${projectName}/\n`);
 
     syncCopyFiles();
+    syncDataManager();
     syncPackageJson();
     cleanLegacy();
     fixGitignore();
@@ -259,4 +319,7 @@ async function main() {
     }
 }
 
-main().catch((err) => { console.error(err); process.exit(1); });
+main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+});

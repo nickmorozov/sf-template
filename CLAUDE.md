@@ -62,9 +62,10 @@ The sync script is the core mechanism. It resolves paths relative to `__dirname`
 - **Copies** all config files listed above to the project root (overwrites)
 - **Merges** `package.json`:
   - `devDependencies` — template versions win, project-specific extras preserved
-  - `scripts` — only template-managed scripts updated (see `TEMPLATE_MANAGED_SCRIPTS` in sync.js); project-specific scripts like `data:*`, `open:*` are never touched
+  - `scripts` — only template-managed scripts updated (see `TEMPLATE_MANAGED_SCRIPTS` in sync.js); project-specific scripts like `open:*`, `package:*` are never touched
   - `engines`, `lint-staged` — overwritten from template
   - `name`, `version`, `workspaces`, `dependencies` — preserved from project
+- **Adds** `sf-data-manager` git submodule if not present, ensures `workspaces` includes it, cleans up legacy `data-tool` workspace reference
 - **Deletes** legacy config files (`.huskyrc`, `.eslintrc`, `.eslintrc.json`, `aura.eslintrc.json`, `lwc.eslint.json`, `.eslintignore`, `lint-staged.config.js`)
 - **Fixes** `.gitignore` (`.husky/` → `.husky/_/` so hooks are committed)
 - Flags: `--dry-run` (preview only), `--force` (apply without prompting)
@@ -132,7 +133,7 @@ npm run sync:update
 - `sfdx-project.json` — package directories, API version, namespaces
 - `.gitignore` — only patched (`.husky/` → `.husky/_/`), never overwritten
 - `.env` — org aliases, credentials
-- `data-tool/` workspace and `data:*` scripts
+- `config/*.yaml` — project-specific YAML config for sf-data-manager (template includes examples in `config/`)
 - `post-merge` / `restore-org-config.sh` hooks (multi-org branch config)
 - CI/CD workflows (`.github/workflows/`)
 - `CLAUDE.md` for the consumer project
