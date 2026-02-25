@@ -2,7 +2,7 @@
 
 ```bash
 # 1. Add the submodule (one-time)
-git submodule add https://github.com/nickmorozov/sf-template .template
+git submodule add https://github.com/nickmorozov/sf-template .template -b main
 
 # 3. Apply the sync
 node .template/sync.js
