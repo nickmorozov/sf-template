@@ -21,6 +21,7 @@
         "precommit": "lint-staged",
         "prepare": "husky || true",
         "update": "npm update",
+        "update:modules": "git submodule update --init --remote --recursive sf-data-manager",
         "source:validate": "sf project deploy start --dry-run --wait 999",
         "source:push": "sf project deploy start --wait 999",
         "source:pull": "sf project retrieve start --wait 999",
