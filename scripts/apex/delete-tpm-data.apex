@@ -1,0 +1,12 @@
+delete [SELECT Id FROM cgcloud__Product_Assortment_Template__c];
+delete [SELECT Id FROM cgcloud__Product_Template__c];
+delete [SELECT Id FROM cgcloud__Fund_Transaction_Template__c];
+delete [SELECT Id FROM cgcloud__Account_Template__c];
+delete [SELECT Id FROM cgcloud__KPI_Map__c];
+delete [SELECT Id FROM cgcloud__Tactic_Template__c];
+delete [SELECT Id FROM cgcloud__RBF_Template__c];
+delete [SELECT Id FROM cgcloud__Promotion_Template__c];
+delete [SELECT Id FROM cgcloud__Fund_Template__c];
+delete [SELECT Id FROM cgcloud__KPI_Set_KPI_Definition__c];
+delete [SELECT Id FROM cgcloud__KPI_Definition__c];
+delete [SELECT Id FROM cgcloud__KPI_Set__c];
