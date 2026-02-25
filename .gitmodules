@@ -1,0 +1,3 @@
+[submodule "sf-data-manager"]
+	path = sf-data-manager
+	url = git@github.com:nickmorozov/sf-data-manager.git

@@ -63,9 +63,9 @@ const TEMPLATE_MANAGED_SCRIPTS = [
     'data:import:sim',
 ];
 
-// ── sf-data-manager submodule ───────────────────────────────────────
-const DATA_MANAGER_REPO = 'git@github.com:nickmorozov/sf-data-manager.git';
-const DATA_MANAGER_DIR = 'sf-data-manager';
+// ── sf-data-manager (nested submodule inside .template) ─────────────
+const DATA_MANAGER_WORKSPACE = '.template/sf-data-manager';
+const LEGACY_WORKSPACES = ['sf-data-manager', 'data-tool'];
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -242,45 +242,47 @@ function fixGitignore() {
     }
 }
 
-// ── sf-data-manager submodule + workspace ────────────────────────────
+// ── sf-data-manager (nested submodule) + workspace ──────────────────
 
 function syncDataManager() {
-    const dmDir = path.join(PROJECT_DIR, DATA_MANAGER_DIR);
+    const dmDir = path.join(PROJECT_DIR, DATA_MANAGER_WORKSPACE);
 
-    // 1. Add submodule if not present
-    if (!fs.existsSync(dmDir)) {
-        console.log(`  + ${DATA_MANAGER_DIR}/ (git submodule)`);
-        changes.push({ type: 'create', file: DATA_MANAGER_DIR });
+    // 1. Initialize nested submodule if not present
+    if (!fs.existsSync(path.join(dmDir, 'main.js'))) {
+        console.log(`  + ${DATA_MANAGER_WORKSPACE}/ (init nested submodule)`);
+        changes.push({ type: 'create', file: DATA_MANAGER_WORKSPACE });
 
         if (!DRY_RUN) {
-            execSync(['git', 'submodule', 'add', DATA_MANAGER_REPO, DATA_MANAGER_DIR].join(' '), { cwd: PROJECT_DIR, stdio: 'pipe' });
+            execSync('git submodule update --init --recursive .template', { cwd: PROJECT_DIR, stdio: 'pipe' });
         }
     }
 
-    // 2. Ensure workspaces includes sf-data-manager
+    // 2. Ensure workspaces includes .template/sf-data-manager
     const projectPkgPath = path.join(PROJECT_DIR, 'package.json');
     if (!fs.existsSync(projectPkgPath)) return;
 
     const proj = readJson(projectPkgPath);
     const workspaces = proj.workspaces || [];
+    let changed = false;
 
-    if (!workspaces.includes(DATA_MANAGER_DIR)) {
-        workspaces.push(DATA_MANAGER_DIR);
-        proj.workspaces = workspaces;
-        reportPkgChange('workspaces', `+${DATA_MANAGER_DIR}`);
+    if (!workspaces.includes(DATA_MANAGER_WORKSPACE)) {
+        workspaces.push(DATA_MANAGER_WORKSPACE);
+        reportPkgChange('workspaces', `+${DATA_MANAGER_WORKSPACE}`);
+        changed = true;
+    }
 
-        if (!DRY_RUN) {
-            fs.writeFileSync(projectPkgPath, JSON.stringify(proj, null, 4) + '\n');
+    // 3. Clean up legacy workspace references
+    for (const legacy of LEGACY_WORKSPACES) {
+        const idx = workspaces.indexOf(legacy);
+        if (idx !== -1) {
+            workspaces.splice(idx, 1);
+            reportPkgChange('workspaces', `-${legacy} (legacy)`);
+            changed = true;
         }
     }
 
-    // 3. Clean up legacy data-tool workspace reference
-    const dtIdx = workspaces.indexOf('data-tool');
-    if (dtIdx !== -1) {
-        workspaces.splice(dtIdx, 1);
+    if (changed) {
         proj.workspaces = workspaces;
-        reportPkgChange('workspaces', '-data-tool (legacy)');
-
         if (!DRY_RUN) {
             fs.writeFileSync(projectPkgPath, JSON.stringify(proj, null, 4) + '\n');
         }

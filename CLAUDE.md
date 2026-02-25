@@ -65,7 +65,7 @@ The sync script is the core mechanism. It resolves paths relative to `__dirname`
   - `scripts` — only template-managed scripts updated (see `TEMPLATE_MANAGED_SCRIPTS` in sync.js); project-specific scripts like `open:*`, `package:*` are never touched
   - `engines`, `lint-staged` — overwritten from template
   - `name`, `version`, `workspaces`, `dependencies` — preserved from project
-- **Adds** `sf-data-manager` git submodule if not present, ensures `workspaces` includes it, cleans up legacy `data-tool` workspace reference
+- **Initializes** the nested `sf-data-manager` submodule (inside `.template/`), ensures `workspaces` includes `.template/sf-data-manager`, cleans up legacy `sf-data-manager` and `data-tool` workspace references
 - **Deletes** legacy config files (`.huskyrc`, `.eslintrc`, `.eslintrc.json`, `aura.eslintrc.json`, `lwc.eslint.json`, `.eslintignore`, `lint-staged.config.js`)
 - **Fixes** `.gitignore` (`.husky/` → `.husky/_/` so hooks are committed)
 - Flags: `--dry-run` (preview only), `--force` (apply without prompting)
