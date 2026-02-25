@@ -33,9 +33,9 @@
         "sync:preview": "node .template/sync.js --dry-run",
         "sync:update": "git submodule update --remote --recursive .template && node .template/sync.js && npm update",
         "data": "node --disable-warning=DEP0190 .template/sf-data-manager/main.js",
-        "data:export": "SOURCE_ALIAS=\"${EXPORT_ALIAS:-org-dev}\" npm run data -- export",
+        "data:export": "SOURCE_ALIAS=\"${SOURCE_ALIAS:-org-dev}\" npm run data -- export",
         "data:export:verbose": "npm run data:export -- --verbose",
-        "data:import": "TARGET_ALIAS=\"${IMPORT_ALIAS:-org-dev}\" npm run data -- import",
+        "data:import": "TARGET_ALIAS=\"${TARGET_ALIAS:-org-dev}\" npm run data -- import",
         "data:import:verbose": "npm run data:import -- --verbose",
         "data:import:sim": "npm run data:import -- --simulation --verbose"
     },
