@@ -63,10 +63,6 @@ const TEMPLATE_MANAGED_SCRIPTS = [
     'data:import:sim',
 ];
 
-// ── sf-data-manager (nested submodule inside .template) ─────────────
-const DATA_MANAGER_WORKSPACE = '.template/sf-data-manager';
-const LEGACY_WORKSPACES = ['sf-data-manager', 'data-tool'];
-
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function readJson(filePath) {
@@ -244,7 +240,11 @@ function fixGitignore() {
 
 // ── sf-data-manager (nested submodule) + workspace ──────────────────
 
+const DATA_MANAGER_WORKSPACE = '.template/sf-data-manager';
+const LEGACY_WORKSPACES = ['sf-data-manager', 'data-tool'];
+
 function syncDataManager() {
+    const templateName = path.basename(TEMPLATE_DIR);
     const dmDir = path.join(PROJECT_DIR, DATA_MANAGER_WORKSPACE);
 
     // 1. Initialize nested submodule if not present
@@ -253,7 +253,8 @@ function syncDataManager() {
         changes.push({ type: 'create', file: DATA_MANAGER_WORKSPACE });
 
         if (!DRY_RUN) {
-            execSync('git submodule update --init --recursive .template', { cwd: PROJECT_DIR, stdio: 'pipe' });
+            // Only init the nested submodule — NOT the parent .template itself
+            execSync('git submodule update --init sf-data-manager', { cwd: path.join(PROJECT_DIR, templateName), stdio: 'pipe' });
         }
     }
 
