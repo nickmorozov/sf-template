@@ -29,6 +29,7 @@
         "org:list": "sf org list --all --verbose",
         "org:open": "sf org open",
         "sync": "node .template/sync.js",
+        "sync:modules": "git submodule update --remote .template",
         "sync:preview": "node .template/sync.js --dry-run",
         "sync:update": "git submodule update --remote .template && node .template/sync.js && npm install",
         "data": "node --disable-warning=DEP0190 .template/sf-data-manager/main.js",
