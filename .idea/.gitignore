@@ -5,4 +5,13 @@
 /httpRequests/
 # Datasource local storage ignored files
 /dataSources/
-/dataSources.local.xml
+# Code style settings
+/codeStyles/
+# Inspection profiles
+/inspectionProfiles/
+# User-specific project libraries
+/libraries/
+
+# Plugins
+
+csv-editor.xml
