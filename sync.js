@@ -23,9 +23,34 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE = process.argv.includes('--force');
 
 // ── Files to copy verbatim ──────────────────────────────────────────
-const COPY_FILES = ['.prettierrc.yml', '.editorconfig', '.npmrc', '.prettierignore', '.stylelintrc.json', 'eslint.config.mjs', 'jest.config.js'];
+const COPY_FILES = ['.prettierrc.yml', '.editorconfig', '.npmrc', '.prettierignore', '.stylelintrc.json', 'eslint.config.mjs', 'jest.config.js', '.mcp.json'];
 
 const COPY_HOOKS = ['.husky/pre-commit'];
+
+// ── Claude Code files managed by the template ────────────────────────
+// These are copied verbatim. Consumer can add their own files alongside.
+const CLAUDE_MANAGED_FILES = [
+    '.claude/commands/create-lwc.md',
+    '.claude/commands/create-apex.md',
+    '.claude/commands/create-flow-apex.md',
+    '.claude/commands/deploy.md',
+    '.claude/commands/retrieve.md',
+    '.claude/commands/run-tests.md',
+    '.claude/commands/review.md',
+    '.claude/commands/soql.md',
+    '.claude/commands/debug.md',
+    '.claude/commands/local-dev.md',
+    '.claude/agents/sf-reviewer.md',
+    '.claude/agents/sf-deployer.md',
+    '.claude/agents/sf-retriever.md',
+    '.claude/rules/apex-patterns.md',
+    '.claude/rules/lwc-patterns.md',
+    '.claude/rules/security.md',
+    '.claude/rules/testing.md',
+];
+
+// ── VS Code settings (synced verbatim) ──────────────────────────────
+const VSCODE_FILES = ['.vscode/settings.json', '.vscode/extensions.json', '.vscode/launch.json'];
 
 // ── package.json fields managed by the template ─────────────────────
 // These are overwritten from the template. Everything else is preserved.
@@ -101,7 +126,7 @@ function reportPkgChange(field, detail) {
 // ── Copy files ───────────────────────────────────────────────────────
 
 function syncCopyFiles() {
-    for (const relPath of [...COPY_FILES, ...COPY_HOOKS]) {
+    for (const relPath of [...COPY_FILES, ...COPY_HOOKS, ...CLAUDE_MANAGED_FILES, ...VSCODE_FILES]) {
         const src = path.join(TEMPLATE_DIR, relPath);
         const dest = path.join(PROJECT_DIR, relPath);
 
@@ -124,6 +149,64 @@ function syncCopyFiles() {
                 fs.chmodSync(dest, 0o755);
             }
         }
+    }
+}
+
+// ── Merge .claude/settings.json hooks ────────────────────────────────
+
+function syncClaudeSettings() {
+    const templateSettingsPath = path.join(TEMPLATE_DIR, '.claude', 'settings.json');
+    const projectSettingsPath = path.join(PROJECT_DIR, '.claude', 'settings.json');
+
+    if (!fs.existsSync(templateSettingsPath)) return;
+
+    const tpl = readJson(templateSettingsPath);
+
+    // If no project settings exist, copy template verbatim
+    if (!fs.existsSync(projectSettingsPath)) {
+        reportCopy('.claude/settings.json', true);
+        if (!DRY_RUN) {
+            const dir = path.dirname(projectSettingsPath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(projectSettingsPath, JSON.stringify(tpl, null, 4) + '\n');
+        }
+        return;
+    }
+
+    const proj = readJson(projectSettingsPath);
+    const merged = { ...proj };
+
+    // Merge hooks: match by prompt prefix (first 50 chars) since hooks have no unique ID
+    if (tpl.hooks) {
+        merged.hooks = merged.hooks || {};
+
+        for (const [hookType, tplHooks] of Object.entries(tpl.hooks)) {
+            const mergedHooks = [...(merged.hooks[hookType] || [])];
+
+            for (const tplHook of tplHooks) {
+                const tplPrefix = (tplHook.prompt || '').slice(0, 50);
+                const existingIdx = mergedHooks.findIndex((h) => h.prompt && h.prompt.slice(0, 50) === tplPrefix);
+
+                if (existingIdx !== -1) {
+                    if (JSON.stringify(mergedHooks[existingIdx]) !== JSON.stringify(tplHook)) {
+                        mergedHooks[existingIdx] = tplHook;
+                        reportPkgChange('.claude/settings.json', `${hookType}: updated`);
+                    }
+                } else {
+                    mergedHooks.push(tplHook);
+                    reportPkgChange('.claude/settings.json', `${hookType}: +template hook`);
+                }
+            }
+
+            merged.hooks[hookType] = mergedHooks;
+        }
+    }
+
+    const projStr = JSON.stringify(proj, null, 4) + '\n';
+    const mergedStr = JSON.stringify(merged, null, 4) + '\n';
+
+    if (projStr !== mergedStr && !DRY_RUN) {
+        fs.writeFileSync(projectSettingsPath, mergedStr);
     }
 }
 
@@ -299,6 +382,7 @@ async function main() {
     console.log(`\nSyncing ${templateName}/ → ${projectName}/\n`);
 
     syncCopyFiles();
+    syncClaudeSettings();
     syncDataManager();
     syncPackageJson();
     cleanLegacy();
