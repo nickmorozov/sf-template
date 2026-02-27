@@ -3,21 +3,33 @@
         "PreToolUse": [
             {
                 "matcher": "Bash",
-                "type": "prompt",
-                "prompt": "Check the command about to be executed. BLOCK the command and warn the user if it matches any of these destructive patterns: 'sf org delete', 'rm -rf force-app', 'rm -rf src', 'git push --force', 'git push origin main --force', 'git reset --hard', 'sf project delete'. If the command is safe, allow it to proceed without comment."
+                "hooks": [
+                    {
+                        "type": "prompt",
+                        "prompt": "Check the command about to be executed. BLOCK the command and warn the user if it matches any of these destructive patterns: 'sf org delete', 'rm -rf force-app', 'rm -rf src', 'git push --force', 'git push origin main --force', 'git reset --hard', 'sf project delete'. If the command is safe, allow it to proceed without comment."
+                    }
+                ]
             }
         ],
         "PostToolUse": [
             {
                 "matcher": "Write|Edit",
-                "type": "prompt",
-                "prompt": "Quickly check the file that was just written or edited. If it is an Apex file (.cls), check for SOQL queries or DML statements (insert, update, delete, upsert, merge, undelete) inside loops (for, while, do) — flag if found. If it is an LWC HTML file (.html in a lwc/ directory), check for deprecated if:true or if:false directives — flag if found with suggestion to use lwc:if/lwc:elseif/lwc:else instead. Only report issues if you actually find them. Be brief."
+                "hooks": [
+                    {
+                        "type": "prompt",
+                        "prompt": "Quickly check the file that was just written or edited. If it is an Apex file (.cls), check for SOQL queries or DML statements (insert, update, delete, upsert, merge, undelete) inside loops (for, while, do) — flag if found. If it is an LWC HTML file (.html in a lwc/ directory), check for deprecated if:true or if:false directives — flag if found with suggestion to use lwc:if/lwc:elseif/lwc:else instead. Only report issues if you actually find them. Be brief."
+                    }
+                ]
             }
         ],
         "Stop": [
             {
-                "type": "prompt",
-                "prompt": "Before finishing, do a quick check: (1) Were any Apex classes created or modified this session without corresponding test classes? If so, remind the user to create test classes before deploying (target 90%+ coverage). (2) Were any files created or modified but not yet deployed? If so, remind the user to deploy with: npm run source:push. Be brief and only mention items that actually apply."
+                "hooks": [
+                    {
+                        "type": "prompt",
+                        "prompt": "Before finishing, do a quick check: (1) Were any Apex classes created or modified this session without corresponding test classes? If so, remind the user to create test classes before deploying (target 90%+ coverage). (2) Were any files created or modified but not yet deployed? If so, remind the user to deploy with: npm run source:push. Be brief and only mention items that actually apply."
+                    }
+                ]
             }
         ]
     }
