@@ -1,0 +1,331 @@
+{
+    "_dataDir": "data",
+    "_salesOrg": {
+        "objectName": "cgcloud__Sales_Organization__c",
+        "externalId": "cgcloud__Sales_Org_Value__c"
+    },
+    "excludeIdsFromCSVFiles": true,
+    "promptOnIssuesInCSVFiles": false,
+    "promptOnMissingParentObjects": false,
+    "objects": [
+        {
+            "objectName": "cgcloud__Sales_Organization__c",
+            "externalId": "cgcloud__Sales_Org_Value__c",
+            "query": "SELECT cgcloud__Sales_Org_Value__c FROM cgcloud__Sales_Organization__c WHERE cgcloud__Sales_Org_Value__c IN (${SALES_ORGS}) ORDER BY cgcloud__Sales_Org_Value__c",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false,
+            "_salesOrgObject": true
+        },
+        {
+            "objectName": "Account",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM Account ORDER BY Name",
+            "operation": "Upsert",
+            "master": false,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "Contact",
+            "externalId": "FirstName;LastName",
+            "query": "SELECT readonly_false FROM Contact ORDER BY LastName, FirstName",
+            "operation": "Upsert",
+            "master": false,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Allowed_Child_Type__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgpm__Allowed_Child_Type__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false,
+            "_hierarchy": {
+                "childField": "Name",
+                "parentField": "cgpm__Parent_Work_Item_Template__r.Name",
+                "parentIdField": "cgpm__Parent_Work_Item_Template__c"
+            }
+        },
+        {
+            "objectName": "cgpm__Project__c",
+            "externalId": "cgpm__Project_Template__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Project__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Project_Role__c",
+            "externalId": "cgpm__Resource_Type_Template__r.Name;cgpm__Project__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Project_Role__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Project_Template__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgpm__Project_Template__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Project_Template_Work_Item_Type__c",
+            "externalId": "cgpm__Project_Template__r.Name;cgpm__Work_Item_Template__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Project_Template_Work_Item_Type__c ORDER BY cgpm__Project_Template__r.Name, Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Resource_Assignment__c",
+            "externalId": "cgpm__Resource_User__r.Email;cgpm__Project__r.Name;cgpm__Resource_Type_Template__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Resource_Assignment__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Resource_Type_Template__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgpm__Resource_Type_Template__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Template_Action_Config__c",
+            "externalId": "cgpm__Work_Item_Template__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Template_Action_Config__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Template_Field_Config__c",
+            "externalId": "cgpm__Work_Item_Template__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Template_Field_Config__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Template_Status_Config__c",
+            "externalId": "cgpm__Work_Item_Template__r.Name;cgpm__Project_Template__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Template_Status_Config__c ORDER BY cgpm__Order__c",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Time_Entry__c",
+            "externalId": "cgpm__Project__r.Name;cgpm__Resource_Assignment__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Time_Entry__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Work_Item__c",
+            "externalId": "cgpm__Project__r.Name;cgpm__Work_Item_Template__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Work_Item__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false,
+            "_hierarchy": {
+                "childField": "Name",
+                "parentField": "cgpm__Parent_Work_Item__r.Name",
+                "parentIdField": "cgpm__Parent_Work_Item__c"
+            }
+        },
+        {
+            "objectName": "cgpm__Work_Item_Assignment__c",
+            "externalId": "cgpm__Work_Item__r.Name;cgpm__Resource_Assignment__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Work_Item_Assignment__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Work_Item_Note__c",
+            "externalId": "cgpm__Work_Item__r.Name;Name",
+            "query": "SELECT readonly_false FROM cgpm__Work_Item_Note__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgpm__Work_Item_Template__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgpm__Work_Item_Template__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__KPI_Set__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgcloud__KPI_Set__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false,
+            "_slim": true
+        },
+        {
+            "objectName": "cgcloud__KPI_Definition__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false, RecordTypeId FROM cgcloud__KPI_Definition__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false,
+            "_slim": true,
+            "_hierarchy": {
+                "childField": "Name",
+                "parentField": "cgcloud__Distribution_Plan_Hierarchy_Dist_Metric__r.Name",
+                "parentIdField": "cgcloud__Distribution_Plan_Hierarchy_Dist_Metric__c"
+            }
+        },
+        {
+            "objectName": "cgcloud__KPI_Set_KPI_Definition__c",
+            "externalId": "cgcloud__KPI_Set__r.Name;cgcloud__KPI_Definition__r.Name",
+            "query": "SELECT readonly_false FROM cgcloud__KPI_Set_KPI_Definition__c ORDER BY cgcloud__KPI_Set__r.Name, cgcloud__KPI_Definition__r.Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false,
+            "_slim": true
+        },
+        {
+            "objectName": "cgcloud__Condition_Search_Group__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgcloud__Condition_Search_Group__c ORDER BY Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__KPI_Map__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgcloud__KPI_Map__c WHERE cgcloud__Sales_Org__c IN (${SALES_ORGS}) ORDER BY cgcloud__Sales_Org__c, Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Account_Template__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false, RecordTypeId FROM cgcloud__Account_Template__c WHERE cgcloud__Sales_Org__c IN (${SALES_ORGS}) ORDER BY cgcloud__Sales_Org__c, Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Fund_Template__c",
+            "externalId": "cgcloud__Description_Language_1__c",
+            "query": "SELECT readonly_false FROM cgcloud__Fund_Template__c WHERE cgcloud__Sales_Org__c IN (${SALES_ORGS}) ORDER BY cgcloud__Sales_Org__c, cgcloud__Description_Language_1__c",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Tactic_Template_Fund_Template__c",
+            "externalId": "cgcloud__Tactic_Template__r.Name;cgcloud__Fund_Template__r.cgcloud__Description_Language_1__c",
+            "query": "SELECT readonly_false FROM cgcloud__Tactic_Template_Fund_Template__c ORDER BY cgcloud__Tactic_Template__r.Name, cgcloud__Fund_Template__r.cgcloud__Description_Language_1__c",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Fund_Transaction_Template__c",
+            "externalId": "cgcloud__Description_Language_1__c",
+            "query": "SELECT readonly_false FROM cgcloud__Fund_Transaction_Template__c WHERE cgcloud__Sales_Org__c IN (${SALES_ORGS}) ORDER BY cgcloud__Sales_Org__c, cgcloud__Description_Language_1__c",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Product_Template__c",
+            "externalId": "cgcloud__External_Id__c;Name",
+            "query": "SELECT readonly_false, RecordTypeId FROM cgcloud__Product_Template__c WHERE cgcloud__Sales_Org__c IN (${SALES_ORGS}) ORDER BY cgcloud__Sales_Org__c, Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false,
+            "_temporaryValues": {
+                "cgcloud__Is_Pushable__c": "false"
+            }
+        },
+        {
+            "objectName": "cgcloud__Product_Assortment_Template__c",
+            "externalId": "cgcloud__Description_Language_1__c",
+            "query": "SELECT readonly_false, RecordTypeId FROM cgcloud__Product_Assortment_Template__c WHERE cgcloud__Sales_Org__c IN (${SALES_ORGS}) ORDER BY cgcloud__Sales_Org__c, cgcloud__Description_Language_1__c",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Promotion_Template__c",
+            "externalId": "cgcloud__Description_Language_1__c",
+            "query": "SELECT readonly_false, RecordTypeId FROM cgcloud__Promotion_Template__c WHERE cgcloud__Sales_Org__c IN (${SALES_ORGS}) ORDER BY cgcloud__Sales_Org__c, cgcloud__Description_Language_1__c",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false,
+            "excludedFields": ["Hkey__c"]
+        },
+        {
+            "objectName": "cgcloud__Tactic_Template__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgcloud__Tactic_Template__c WHERE cgcloud__Sales_Org__c IN (${SALES_ORGS}) ORDER BY cgcloud__Sales_Org__c, Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Tactic_Template_Cond_Creation_Def__c",
+            "externalId": "cgcloud__Tactic_Template__r.Name;cgcloud__Source_Kpi_Definition__r.Name",
+            "query": "SELECT readonly_false FROM cgcloud__Tactic_Template_Cond_Creation_Def__c ORDER BY cgcloud__Tactic_Template__r.Name, cgcloud__Source_Kpi_Definition__r.Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Promotion_Template_Tactic_Template__c",
+            "externalId": "cgcloud__Promotion_Template__r.cgcloud__Description_Language_1__c;cgcloud__Tactic_Template__r.Name",
+            "query": "SELECT readonly_false FROM cgcloud__Promotion_Template_Tactic_Template__c ORDER BY cgcloud__Promotion_Template__r.cgcloud__Description_Language_1__c, cgcloud__Tactic_Template__r.Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Promotion_Template_Hierarchy__c",
+            "externalId": "cgcloud__Parent_Promotion_Template__r.cgcloud__Description_Language_1__c;cgcloud__Child_Promotion_Template__r.cgcloud__Description_Language_1__c",
+            "query": "SELECT readonly_false FROM cgcloud__Promotion_Template_Hierarchy__c ORDER BY cgcloud__Parent_Promotion_Template__r.cgcloud__Description_Language_1__c, cgcloud__Child_Promotion_Template__r.cgcloud__Description_Language_1__c",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__RBF_Template__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgcloud__RBF_Template__c WHERE cgcloud__Sales_Org__c IN (SELECT Id FROM cgcloud__Sales_Organization__c WHERE cgcloud__Sales_Org_Value__c IN (${SALES_ORGS})) ORDER BY cgcloud__Sales_Org__c, Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__Payment_Template__c",
+            "externalId": "Name",
+            "query": "SELECT readonly_false FROM cgcloud__Payment_Template__c WHERE cgcloud__Sales_Org__c IN (SELECT Id FROM cgcloud__Sales_Organization__c WHERE cgcloud__Sales_Org_Value__c IN (${SALES_ORGS})) ORDER BY cgcloud__Sales_Org__c, Name",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        },
+        {
+            "objectName": "cgcloud__RTR_Report_Configuration__c",
+            "externalId": "cgcloud__Internal_Name__c",
+            "query": "SELECT readonly_false FROM cgcloud__RTR_Report_Configuration__c WHERE cgcloud__Sales_Organization__c IN (SELECT Id FROM cgcloud__Sales_Organization__c WHERE cgcloud__Sales_Org_Value__c IN (${SALES_ORGS})) ORDER BY cgcloud__Sales_Organization__c, cgcloud__Internal_Name__c",
+            "operation": "Upsert",
+            "master": true,
+            "deleteOldData": false
+        }
+    ]
+}
