@@ -26,7 +26,7 @@ for (const permset of permsets) {
     console.log(`Assigning ${permset}...`);
     try {
         execFileSync('sf', ['org', 'assign', 'permset', '--name', permset, '--on-behalf-of', ...users], {
-            stdio: 'inherit'
+            stdio: 'inherit',
         });
     } catch (e) {
         console.error(`Failed to assign ${permset}: ${e.message}`);

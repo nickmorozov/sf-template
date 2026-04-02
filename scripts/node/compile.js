@@ -52,7 +52,7 @@ function sf(sfArgs) {
         return execFileSync('sf', sfArgs, {
             encoding: 'utf-8',
             maxBuffer: 10 * 1024 * 1024,
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
         });
     } catch (error) {
         if (error.stdout?.trim()) return error.stdout;
@@ -77,9 +77,7 @@ function rest(endpoint, method = 'GET', body = null) {
     const sfArgs = ['api', 'request', 'rest', url, '--method', method];
     if (targetOrg) sfArgs.push('--target-org', targetOrg);
 
-    const tmpFile = body
-        ? join(tmpdir(), `sf_compile_${process.pid}_${Date.now()}.json`)
-        : null;
+    const tmpFile = body ? join(tmpdir(), `sf_compile_${process.pid}_${Date.now()}.json`) : null;
 
     if (body) {
         writeFileSync(tmpFile, JSON.stringify(body));
@@ -90,7 +88,10 @@ function rest(endpoint, method = 'GET', body = null) {
     try {
         output = sf(sfArgs);
     } finally {
-        if (tmpFile) try { unlinkSync(tmpFile); } catch {}
+        if (tmpFile)
+            try {
+                unlinkSync(tmpFile);
+            } catch {}
     }
 
     if (!output || !output.trim()) return {};
@@ -110,7 +111,7 @@ async function sfAsync(sfArgs) {
     try {
         const { stdout } = await execFileAsync('sf', sfArgs, {
             encoding: 'utf-8',
-            maxBuffer: 10 * 1024 * 1024
+            maxBuffer: 10 * 1024 * 1024,
         });
         return stdout;
     } catch (error) {
@@ -126,9 +127,7 @@ async function restAsync(endpoint, method = 'GET', body = null) {
     if (targetOrg) sfArgs.push('--target-org', targetOrg);
 
     // Each concurrent call gets its own temp file to avoid write conflicts
-    const tmpFile = body
-        ? join(tmpdir(), `sf_compile_${process.pid}_${++tmpCounter}.json`)
-        : null;
+    const tmpFile = body ? join(tmpdir(), `sf_compile_${process.pid}_${++tmpCounter}.json`) : null;
 
     if (body) {
         writeFileSync(tmpFile, JSON.stringify(body));
@@ -139,7 +138,10 @@ async function restAsync(endpoint, method = 'GET', body = null) {
     try {
         output = await sfAsync(sfArgs);
     } finally {
-        if (tmpFile) try { unlinkSync(tmpFile); } catch {}
+        if (tmpFile)
+            try {
+                unlinkSync(tmpFile);
+            } catch {}
     }
 
     if (!output || !output.trim()) return {};
@@ -167,18 +169,13 @@ function formatCompilerErrors(errorsField) {
     if (!errorsField) return null;
 
     try {
-        const errors =
-            typeof errorsField === 'string'
-                ? JSON.parse(errorsField)
-                : errorsField;
+        const errors = typeof errorsField === 'string' ? JSON.parse(errorsField) : errorsField;
         if (!Array.isArray(errors) || errors.length === 0) return null;
 
         const lines = [];
         for (const err of errors) {
             const name = err.name || err.extent || 'Unknown';
-            const location = err.line
-                ? `: line ${err.line}, column ${err.column}`
-                : '';
+            const location = err.line ? `: line ${err.line}, column ${err.column}` : '';
             const message = err.problem || err.message || 'Unknown error';
             lines.push(`${name}${location}: ${message}`);
         }
@@ -197,15 +194,9 @@ async function main() {
     const filter = namespaceFilter();
     if (namespace) console.log(`Using namespace: ${namespace}\n`);
 
-    const classes = query(
-        `SELECT Id, Name, Body FROM ApexClass ${filter} ORDER BY Name`
-    );
-    const triggers = query(
-        `SELECT Id, Name, Body FROM ApexTrigger ${filter} ORDER BY Name`
-    );
-    console.log(
-        `Found ${classes.length} classes and ${triggers.length} triggers\n`
-    );
+    const classes = query(`SELECT Id, Name, Body FROM ApexClass ${filter} ORDER BY Name`);
+    const triggers = query(`SELECT Id, Name, Body FROM ApexTrigger ${filter} ORDER BY Name`);
+    console.log(`Found ${classes.length} classes and ${triggers.length} triggers\n`);
 
     const total = classes.length + triggers.length;
     if (total === 0) {
@@ -215,22 +206,19 @@ async function main() {
 
     // 2 ── Create MetadataContainer
     const container = rest('/sobjects/MetadataContainer', 'POST', {
-        Name: `Compile_${Date.now()}`
+        Name: `Compile_${Date.now()}`,
     });
     const containerId = container.id;
 
     // 3 ── Add classes and triggers to the container (parallel batches)
-    const members = [
-        ...classes.map((cls) => ({ type: 'ApexClassMember', entity: cls })),
-        ...triggers.map((trg) => ({ type: 'ApexTriggerMember', entity: trg }))
-    ];
+    const members = [...classes.map((cls) => ({ type: 'ApexClassMember', entity: cls })), ...triggers.map((trg) => ({ type: 'ApexTriggerMember', entity: trg }))];
 
     let completed = 0;
     await batchAsync(members, async ({ type, entity }) => {
         await restAsync(`/sobjects/${type}`, 'POST', {
             MetadataContainerId: containerId,
             ContentEntityId: entity.Id,
-            Body: entity.Body
+            Body: entity.Body,
         });
         completed++;
         process.stdout.write(`\r  [${completed}/${total}] Adding members...`);
@@ -241,27 +229,21 @@ async function main() {
     console.log('\nCompiling...');
     const asyncReq = rest('/sobjects/ContainerAsyncRequest', 'POST', {
         MetadataContainerId: containerId,
-        IsCheckOnly: true
+        IsCheckOnly: true,
     });
 
     // 5 ── Poll until complete
     let dots = 0;
     while (true) {
-        const status = rest(
-            `/sobjects/ContainerAsyncRequest/${asyncReq.id}`
-        );
+        const status = rest(`/sobjects/ContainerAsyncRequest/${asyncReq.id}`);
         const state = status.State;
 
         if (state === 'Completed') {
-            console.log(
-                `\n✅ Compiled ${classes.length} classes and ${triggers.length} triggers.`
-            );
+            console.log(`\n✅ Compiled ${classes.length} classes and ${triggers.length} triggers.`);
             break;
         }
 
-        if (
-            ['Failed', 'Error', 'Aborted', 'Invalidated'].includes(state)
-        ) {
+        if (['Failed', 'Error', 'Aborted', 'Invalidated'].includes(state)) {
             console.error(`\n❌ Compilation ${state}`);
 
             // Try CompilerErrors from the REST response first
@@ -270,13 +252,9 @@ async function main() {
             // Fallback: query via SOQL (REST GET sometimes omits CompilerErrors)
             if (!formatted) {
                 try {
-                    const records = query(
-                        `SELECT CompilerErrors FROM ContainerAsyncRequest WHERE Id = '${asyncReq.id}'`
-                    );
+                    const records = query(`SELECT CompilerErrors FROM ContainerAsyncRequest WHERE Id = '${asyncReq.id}'`);
                     if (records.length > 0) {
-                        formatted = formatCompilerErrors(
-                            records[0].CompilerErrors
-                        );
+                        formatted = formatCompilerErrors(records[0].CompilerErrors);
                     }
                 } catch {}
             }
@@ -291,18 +269,14 @@ async function main() {
             }
 
             if (!formatted && !status.ErrorMsg) {
-                console.error(
-                    '\nNo error details available. Check Setup → Apex Classes in the org.'
-                );
+                console.error('\nNo error details available. Check Setup → Apex Classes in the org.');
             }
 
             process.exit(1);
         }
 
         dots = (dots + 1) % 4;
-        process.stdout.write(
-            `\r  ${state}${'.'.repeat(dots)}${' '.repeat(3 - dots)}   `
-        );
+        process.stdout.write(`\r  ${state}${'.'.repeat(dots)}${' '.repeat(3 - dots)}   `);
         await sleep(POLL_MS);
     }
 
