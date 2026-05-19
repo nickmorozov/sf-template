@@ -23,7 +23,7 @@ const { promisify } = require('util');
 
 const execFileAsync = promisify(execFileCb);
 
-const API_VERSION = '65.0';
+const API_VERSION = '66.0';
 const POLL_MS = 2000;
 const CONCURRENCY = 10;
 
