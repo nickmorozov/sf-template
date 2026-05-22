@@ -1,0 +1,10 @@
+# ── Restore branch-specific org config inside the merge commit ─────
+# When `git merge` produces a real merge commit (non-fast-forward),
+# this hook fires AFTER auto-merge succeeds and BEFORE the commit is
+# sealed. Rewriting + staging the org-config files here makes them
+# part of the merge commit itself — no separate "fix config" follow-up
+# is needed.
+#
+# Fast-forward pulls don't produce a merge commit, so this hook is not
+# invoked; .husky/post-merge handles that path with --no-stage.
+scripts/shell/restore-org-config.sh

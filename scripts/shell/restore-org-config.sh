@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 #
 # Rewrite branch-specific org aliases in protected files.
-# Called by pre-commit (during local merges) and post-merge (after git pull).
+# Called by:
+#   - .husky/pre-merge-commit (merge commits — modify + stage, lands in merge)
+#   - .husky/post-merge       (ff pull / non-merge-commit pull — modify only)
+#   - scripts/promote.sh      (between pipeline merges — modify + stage)
+#
+# This script only modifies (and optionally stages) files. It never commits
+# anything itself — the surrounding hook context owns the commit. That keeps
+# the rewrite inside the merge or commit being created, no separate "fix
+# config" follow-up commit.
 #
 # Usage:
-#   restore-org-config.sh           # modify + stage (for pre-commit)
-#   restore-org-config.sh --no-stage # modify only (for post-merge/pull)
+#   restore-org-config.sh             # modify + stage (default)
+#   restore-org-config.sh --no-stage  # modify only (post-merge / ff pull)
 #
 # Branch → env mapping: dev, int, qa, uat → same; main → prod
 # Replaces: bumblebee-{env}, bumblebee_{env}, .bb.{env}
@@ -56,7 +64,13 @@ done
 
 if [ "$CHANGED" = true ]; then
     echo "✓ Restored org config for '$BRANCH' (bumblebee-${ENV})"
-    if [ "$STAGE" = true ]; then
-        git commit -m "Set org config to bumblebee-${ENV} [skip ci]"
-    fi
 fi
+
+# Intentionally no `git commit` (or --amend) here. The hook that invoked
+# this script (pre-merge-commit / scripts/promote.sh) is the one that
+# creates the commit, so staged changes land in that commit naturally.
+# Calling --amend from post-merge would fail with
+# "fatal: You are in the middle of a merge -- cannot amend"
+# whenever MERGE_HEAD is still around. Creating a standalone "Set org
+# config" commit on every merge produces the noise the pre-merge-commit
+# approach was added to avoid.

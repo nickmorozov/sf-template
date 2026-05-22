@@ -1,86 +1,92 @@
 #!/usr/bin/env bash
 # ── promote.sh ─────────────────────────────────────────────────────
-# Fast-track changes through the branch pipeline.
-#   Forward  (default):  dev → qa → uat → main
-#   Backward (--back):   main → uat → qa → dev
-# Merge commits include [skip ci] so GitHub Actions won't trigger deployments.
+# Move changes through the branch pipeline.
 #
-# Usage:
-#   npm run promote:main          # Forward, all the way to main
-#   npm run promote:uat           # Forward, stop at uat
-#   npm run promote:qa            # Forward, stop at qa
-#   npm run promote:dev           # Merge feature branch into dev only
+#   Forward  (default):  feature → {dev, int} → qa → uat → main
+#   Backward (--back):   main → uat → qa → {dev, int} → feature
 #
-#   bash promote.sh --back            # Backmerge to dev (default)
-#   bash promote.sh --back dev        # Backmerge down to dev
-#   bash promote.sh --back qa         # Backmerge down to qa
+# `int` is a parallel mirror of `dev` (Consumer Goods Cloud integration
+# org). Every merge that touches dev is replayed against int so the two
+# stay byte-for-byte in sync, but int never feeds qa/uat/main itself.
+#
+# Forward usage:
+#   bash promote.sh                  # promote current branch up to main
+#   bash promote.sh uat              # stop at uat
+#   bash promote.sh qa               # stop at qa
+#   bash promote.sh dev              # only merge into dev (and int)
+#
+# Backward usage:
+#   bash promote.sh --back           # backmerge from main down to current
+#   bash promote.sh --back uat       # backmerge from uat down to current
+#   bash promote.sh --back qa        # backmerge from qa down to current
+#
+# Feature/hotfix branches:
+#   - forward: feature → {dev, int}, then continue to target
+#   - backward: backmerge down to {dev, int}, then merge dev → feature
+#
+# Merge commits include [skip ci] so GitHub Actions doesn't deploy.
+# Requires a clean working tree.
 # ───────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 PIPELINE=(dev qa uat main)
+DEV_MIRROR="int"
 
-# ── Help ──────────────────────────────────────────────────────────
 show_help() {
   cat <<'EOF'
 promote.sh — Move changes through the branch pipeline
 
-Forward (default):  dev → qa → uat → main
-Backward (--back):  main → uat → qa → dev
+Forward (default):  feature → {dev, int} → qa → uat → main
+Backward (--back):  main → uat → qa → {dev, int} → feature
 
-Usage:
-  npm run promote:main          Promote from current branch all the way to main
-  npm run promote:uat           Promote up to uat
-  npm run promote:qa            Promote up to qa
-  npm run promote:dev           Merge feature branch into dev only
+Forward usage:
+  bash promote.sh                  Promote current branch up to main
+  bash promote.sh uat              Stop at uat
+  bash promote.sh qa               Stop at qa
+  bash promote.sh dev              Only merge into dev (and int)
 
-  bash promote.sh --back            Backmerge to dev (default)
-  bash promote.sh --back qa         Backmerge down to qa
-  bash promote.sh --back dev        Backmerge down to dev
+Backward usage:
+  bash promote.sh --back           Backmerge from main down to current
+  bash promote.sh --back uat       Backmerge from uat down to current
+  bash promote.sh --back qa        Backmerge from qa down to current
 
-Forward mode: if you're on a feature/* or hotfix/* branch, it merges
-into dev first, then continues the chain to the target.
+`int` mirrors dev: any merge into or out of dev is also performed against
+int. int never feeds qa/uat/main on its own.
 
-Backward mode: must be run from a pipeline branch (main/uat/qa). Walks
-the pipeline in reverse, merging the higher branch into the next lower
-one at each step until it reaches the target. Use this to re-sync
-changes that landed via hotfix higher in the chain back down to dev.
+Feature/hotfix branches:
+  forward  → feature merges into {dev, int}, then continues
+  backward → backmerge reaches {dev, int}, then dev → feature
 
-All merge commits include [skip ci].
-Requires a clean working tree (no uncommitted changes).
+All merge commits include [skip ci] so GitHub Actions doesn't deploy.
+Requires a clean working tree.
 EOF
   exit 0
 }
 
 # ── Parse args ────────────────────────────────────────────────────
 DIRECTION=forward
-if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-  show_help
-fi
-if [[ "${1:-}" == "--back" ]]; then
-  DIRECTION=backward
-  shift
-fi
+case "${1:-}" in
+  --help | -h) show_help ;;
+  --back)
+    DIRECTION=backward
+    shift
+    ;;
+esac
 
-# Defaults differ by direction
-if [[ "$DIRECTION" == "backward" ]]; then
-  TARGET="dev"
-else
-  TARGET="main"
-fi
-if [[ -n "${1:-}" ]]; then
-  TARGET="$1"
-fi
+# Forward: arg = TARGET (where to stop). Default = main.
+# Backward: arg = SOURCE (where to start). Default = main.
+ARG="${1:-main}"
 
-# Validate target
-valid_target=false
-for branch in "${PIPELINE[@]}"; do
-  if [[ "$branch" == "$TARGET" ]]; then
-    valid_target=true
-    break
-  fi
+valid=false
+for b in "${PIPELINE[@]}"; do
+  [[ "$b" == "$ARG" ]] && valid=true
 done
-if [[ "$valid_target" == false ]]; then
-  echo "Error: '$TARGET' is not a valid target. Choose from: ${PIPELINE[*]}"
+if [[ "$valid" == false ]]; then
+  if [[ "$DIRECTION" == "backward" ]]; then
+    echo "Error: '$ARG' is not a valid backmerge source. Choose from: ${PIPELINE[*]}"
+  else
+    echo "Error: '$ARG' is not a valid target. Choose from: ${PIPELINE[*]}"
+  fi
   exit 1
 fi
 
@@ -92,25 +98,59 @@ fi
 
 ORIGINAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-# ── Determine starting point ─────────────────────────────────────
-# If we're not on a pipeline branch, merge into dev first.
+# A branch is "on pipeline" if it's dev/qa/uat/main OR the int mirror.
 on_pipeline=false
-for branch in "${PIPELINE[@]}"; do
-  if [[ "$branch" == "$ORIGINAL_BRANCH" ]]; then
-    on_pipeline=true
-    break
-  fi
+for b in "${PIPELINE[@]}" "$DEV_MIRROR"; do
+  [[ "$b" == "$ORIGINAL_BRANCH" ]] && on_pipeline=true
 done
+
+# ── Return-to-original on any exit (success OR crash) ────────────
+# Without this trap, a script crash mid-walk (e.g., the bash-3.2
+# `declare -A` failure we hit in production) leaves the user
+# stranded on whatever pipeline branch was last checked out.
+return_to_original() {
+  local exit_code=$?
+  local current
+  current=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+  # If a merge was interrupted mid-flight, don't pile checkout on top.
+  if [[ -f .git/MERGE_HEAD ]]; then
+    echo ""
+    echo "⚠  Merge in progress on '$current' — resolve before switching branches."
+    exit "$exit_code"
+  fi
+
+  if [[ -z "$current" || "$current" == "$ORIGINAL_BRANCH" ]]; then
+    exit "$exit_code"
+  fi
+
+  # Commit any leftover org-config mods so the checkout doesn't abort.
+  if [[ -n "$(git status --porcelain)" ]]; then
+    git add -A
+    ADMIN_OVERRIDE=1 git commit --no-verify \
+      -m "Restore org config for $current [skip ci]" 2>/dev/null || true
+    git push origin "$current" 2>/dev/null || true
+  fi
+
+  if [[ "$on_pipeline" == false ]]; then
+    git checkout dev 2>/dev/null || true
+    # Best-effort cleanup of the local feature branch if it merged cleanly.
+    git branch -d "$ORIGINAL_BRANCH" 2>/dev/null || true
+  else
+    git checkout "$ORIGINAL_BRANCH" 2>/dev/null || true
+  fi
+
+  exit "$exit_code"
+}
+trap return_to_original EXIT
 
 echo "Fetching latest from origin..."
 git fetch origin
 
-# After each merge (and FF-pull), the post-merge hook rewrites
-# branch-specific org config files via restore-org-config.sh
-# --no-stage. Those modifications land in the working tree
-# uncommitted. If left alone, the next `git checkout` aborts with
-# "Your local changes would be overwritten". This helper commits
-# them so each iteration starts with a clean tree.
+# After each merge (and FF-pull), the post-merge hook may rewrite
+# branch-specific org config files. The pre-merge-commit hook usually
+# folds those into the merge commit itself, but the helper here is a
+# safety net for any path the hook didn't cover.
 commit_org_config_if_dirty() {
   local branch="$1"
   if [[ -n "$(git status --porcelain)" ]]; then
@@ -122,113 +162,134 @@ commit_org_config_if_dirty() {
 
 BRANCHES_TO_PUSH=("$ORIGINAL_BRANCH")
 
-if [[ "$DIRECTION" == "forward" && "$on_pipeline" == false ]]; then
+# do_merge SRC DST [--no-mirror]
+# Performs a single merge step, mirrors against int when dev is involved.
+do_merge() {
+  local src="$1" dst="$2"
+  local mirror_flag="${3:-}"
   echo ""
-  echo "Merging $ORIGINAL_BRANCH → dev..."
-  git checkout dev
-  git pull --ff-only origin dev
-  commit_org_config_if_dirty dev
-  git merge "$ORIGINAL_BRANCH" -m "Merge $ORIGINAL_BRANCH into dev [skip ci]"
-  commit_org_config_if_dirty dev
-  BRANCHES_TO_PUSH+=(dev)
-  START="dev"
-elif [[ "$DIRECTION" == "backward" && "$on_pipeline" == false ]]; then
-  echo "Error: backmerge (--back) must be run from a pipeline branch (${PIPELINE[*]})."
-  echo "Currently on '$ORIGINAL_BRANCH'."
-  exit 1
-else
-  START="$ORIGINAL_BRANCH"
-fi
+  echo "Merging $src → $dst..."
+  git checkout "$dst"
+  git pull --ff-only origin "$dst" 2>/dev/null || true
+  commit_org_config_if_dirty "$dst"
+  git merge "$src" -m "Merge $src into $dst [skip ci]"
+  commit_org_config_if_dirty "$dst"
+  BRANCHES_TO_PUSH+=("$dst")
 
-# ── Walk the pipeline ─────────────────────────────────────────────
-# Find where to start and stop in the chain
-start_index=-1
-target_index=-1
-for i in "${!PIPELINE[@]}"; do
-  if [[ "${PIPELINE[$i]}" == "$START" ]]; then
-    start_index=$i
+  # Mirror to int when dev sits on either end of the merge.
+  # Skip if either side is already int (would loop).
+  if [[ "$mirror_flag" != "--no-mirror" ]] \
+    && [[ "$dst" == "dev" || "$src" == "dev" ]] \
+    && [[ "$dst" != "$DEV_MIRROR" && "$src" != "$DEV_MIRROR" ]]; then
+    echo "  ↳ Mirror: $src → $DEV_MIRROR"
+    git checkout "$DEV_MIRROR"
+    git pull --ff-only origin "$DEV_MIRROR" 2>/dev/null || true
+    commit_org_config_if_dirty "$DEV_MIRROR"
+    git merge "$src" -m "Merge $src into $DEV_MIRROR [skip ci]"
+    commit_org_config_if_dirty "$DEV_MIRROR"
+    BRANCHES_TO_PUSH+=("$DEV_MIRROR")
   fi
-  if [[ "${PIPELINE[$i]}" == "$TARGET" ]]; then
-    target_index=$i
-  fi
-done
+}
 
+# Map a pipeline branch (or the int mirror) to its index in PIPELINE.
+# Treats int as dev for indexing purposes.
+index_of() {
+  local name="$1"
+  [[ "$name" == "$DEV_MIRROR" ]] && name="dev"
+  for i in "${!PIPELINE[@]}"; do
+    [[ "${PIPELINE[$i]}" == "$name" ]] && {
+      echo "$i"
+      return
+    }
+  done
+  echo "-1"
+}
+
+# ── Direction-specific walk ──────────────────────────────────────
 if [[ "$DIRECTION" == "forward" ]]; then
-  # Forward: start_index must be < target_index, walk +1 each step
+  TARGET="$ARG"
+
+  if [[ "$on_pipeline" == false ]]; then
+    # feature/hotfix: merge into dev (and int via mirror)
+    do_merge "$ORIGINAL_BRANCH" "dev"
+    START="dev"
+  else
+    START="$ORIGINAL_BRANCH"
+  fi
+
+  start_index=$(index_of "$START")
+  target_index=$(index_of "$TARGET")
+
   if [[ $start_index -ge $target_index ]]; then
     if [[ "$on_pipeline" == false ]]; then
       echo ""
-      echo "Merged into dev. Target ($TARGET) is at or before dev — nothing more to promote."
+      echo "Merged into dev (and $DEV_MIRROR). Target ($TARGET) is at or before dev — nothing more to promote."
     else
       echo "Current branch ($START) is already at or past target ($TARGET). Nothing to do."
     fi
   else
     for ((i = start_index + 1; i <= target_index; i++)); do
-      src="${PIPELINE[$((i - 1))]}"
-      dst="${PIPELINE[$i]}"
-      echo ""
-      echo "Merging $src → $dst..."
-      git checkout "$dst"
-      git pull --ff-only origin "$dst"
-      commit_org_config_if_dirty "$dst"
-      git merge "$src" -m "Merge $src into $dst [skip ci]"
-      commit_org_config_if_dirty "$dst"
-      BRANCHES_TO_PUSH+=("$dst")
+      do_merge "${PIPELINE[$((i - 1))]}" "${PIPELINE[$i]}"
     done
   fi
+
 else
-  # Backward (--back): start_index must be > target_index, walk -1 each step
-  if [[ $start_index -le $target_index ]]; then
-    echo "Current branch ($START) is already at or below target ($TARGET). Nothing to backmerge."
+  # Backward (--back): SOURCE = top of chain, endpoint = current branch.
+  SOURCE="$ARG"
+
+  if [[ "$on_pipeline" == false ]]; then
+    END="dev" # backmerge down to dev, then dev → feature at the end
   else
-    for ((i = start_index - 1; i >= target_index; i--)); do
-      src="${PIPELINE[$((i + 1))]}"
-      dst="${PIPELINE[$i]}"
-      echo ""
-      echo "Backmerging $src → $dst..."
-      git checkout "$dst"
-      git pull --ff-only origin "$dst"
-      commit_org_config_if_dirty "$dst"
-      git merge "$src" -m "Merge $src into $dst [skip ci]"
-      commit_org_config_if_dirty "$dst"
-      BRANCHES_TO_PUSH+=("$dst")
+    END="$ORIGINAL_BRANCH"
+  fi
+
+  source_index=$(index_of "$SOURCE")
+  end_index=$(index_of "$END")
+
+  if [[ $source_index -le $end_index ]]; then
+    echo "Source ($SOURCE) is at or below endpoint ($END). Nothing to backmerge."
+  else
+    for ((i = source_index - 1; i >= end_index; i--)); do
+      do_merge "${PIPELINE[$((i + 1))]}" "${PIPELINE[$i]}"
     done
+
+    # Feature/hotfix tail: dev → feature (no int mirror — feature isn't int).
+    if [[ "$on_pipeline" == false ]]; then
+      do_merge "dev" "$ORIGINAL_BRANCH" --no-mirror
+    fi
   fi
 fi
 
-# ── Push all promoted branches ────────────────────────────────────
-if [[ ${#BRANCHES_TO_PUSH[@]} -gt 0 ]]; then
+# ── Push all touched branches (dedup) ────────────────────────────
+# Bash 3.2 (default on macOS) has no associative arrays, so dedup
+# with a plain array scan instead of `declare -A`.
+UNIQUE=()
+for b in "${BRANCHES_TO_PUSH[@]}"; do
+  seen=0
+  if [[ ${#UNIQUE[@]} -gt 0 ]]; then
+    for u in "${UNIQUE[@]}"; do
+      if [[ "$u" == "$b" ]]; then
+        seen=1
+        break
+      fi
+    done
+  fi
+  [[ $seen -eq 0 ]] && UNIQUE+=("$b")
+done
+
+if [[ ${#UNIQUE[@]} -gt 0 ]]; then
   echo ""
-  echo "Pushing: ${BRANCHES_TO_PUSH[*]}..."
-  for branch in "${BRANCHES_TO_PUSH[@]}"; do
-    git push origin "$branch"
+  echo "Pushing: ${UNIQUE[*]}..."
+  for b in "${UNIQUE[@]}"; do
+    git push origin "$b"
   done
   echo ""
   if [[ "$DIRECTION" == "backward" ]]; then
-    echo "Done! Backmerged down to $TARGET with [skip ci] — no deployments will trigger."
+    echo "Done! Backmerged from $SOURCE down to $END — no deployments will trigger."
   else
-    echo "Done! Promoted to $TARGET with [skip ci] — no deployments will trigger."
+    echo "Done! Promoted to $TARGET — no deployments will trigger."
   fi
 else
   echo ""
   echo "Nothing to push."
-fi
-
-# ── Return to original branch ────────────────────────────────────
-# Defensive: any post-merge mods that slipped past the per-step
-# helper (e.g., the nothing-to-promote path) get committed here so
-# the checkout back to a feature/* (or other) branch doesn't abort.
-current=$(git rev-parse --abbrev-ref HEAD)
-if [[ -n "$(git status --porcelain)" ]]; then
-  git add -A
-  ADMIN_OVERRIDE=1 git commit --no-verify -m "Restore org config for $current [skip ci]"
-  # Also push this trailing commit so remote stays consistent.
-  git push origin "$current"
-fi
-
-if [[ "$on_pipeline" == false ]]; then
-  git checkout dev
-  git branch -d "$ORIGINAL_BRANCH"
-else
-  git checkout "$ORIGINAL_BRANCH"
 fi
