@@ -1,0 +1,270 @@
+# Reusable workflow: Deploy Salesforce metadata to a single org.
+# Handles delta generation, change detection, full or delta deploy,
+# and automatic TPM template data import when tpm/ data changes.
+# Called by per-environment deploy workflows.
+#
+# Respects environment variables:
+#   FULL_DEPLOY    — force full deploy (skip delta)
+#   FULL_DATA      — force data import after every deploy
+#   SKIP_DEPLOY    — skip metadata deployment
+#   SKIP_DATA      — skip data import
+#   SKIP_NOTIFY    — passed to caller via outputs
+#   SALES_ORGS     — restrict data import to specific Sales Org codes (e.g., "0001,0002")
+#   DELETE_OLD_DATA — persistent override: delete old data before importing
+#
+# Commit-message markers (case-insensitive, scanned across all pushed commits):
+#   [metadata]     — force full metadata deploy (skip delta) for this push
+#   [data]         — force data import (skip the tpm/ diff check) for this push
+
+name: Salesforce Deploy
+
+on:
+    workflow_call:
+        inputs:
+            org_name:
+                required: true
+                type: string
+                description: Display name (e.g., DEV, QA)
+            org_alias:
+                required: true
+                type: string
+                description: Salesforce CLI alias (e.g., dev, qa)
+            environment:
+                required: true
+                type: string
+                description: GitHub Environment for secret scoping
+            full:
+                required: false
+                type: boolean
+                default: false
+            ignore_deploy_errors:
+                required: false
+                type: boolean
+                default: false
+                description: Add --ignore-warnings and --ignore-errors to delta deploy
+            import_data:
+                required: false
+                type: boolean
+                default: false
+                description: Force TPM template data import (auto-detected from tpm/ changes)
+            delete_old_data:
+                required: false
+                type: boolean
+                default: false
+                description: Delete old data before importing (clean import)
+        outputs:
+            skip_notify:
+                value: ${{ jobs.deploy.outputs.skip_notify }}
+
+jobs:
+    deploy:
+        name: Deploy to ${{ inputs.org_name }}
+        runs-on: ubuntu-latest
+        environment: ${{ inputs.environment }}
+        outputs:
+            skip_notify: ${{ vars.SKIP_NOTIFY }}
+        steps:
+            - name: Checkout (full history)
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '23'
+
+            - name: Install Salesforce CLI
+              run: npm install --global @salesforce/cli
+
+            # Scan pushed commit messages for [metadata] / [data] markers.
+            # Messages are read via `git log` from the local checkout, never
+            # interpolated into a shell command, so no risk of injection.
+            - name: Parse commit-message markers
+              id: markers
+              env:
+                  BEFORE_SHA: ${{ github.event.before }}
+                  AFTER_SHA: ${{ github.event.after }}
+              run: |
+                  RANGE=""
+                  # github.event.before is all-zeros on the first push to a
+                  # new branch — fall back to the last commit in that case.
+                  if [ -n "$BEFORE_SHA" ] && [ -n "$AFTER_SHA" ] \
+                      && ! [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
+                      RANGE="${BEFORE_SHA}..${AFTER_SHA}"
+                  fi
+
+                  if [ -n "$RANGE" ] && git rev-parse --quiet --verify "$BEFORE_SHA" >/dev/null 2>&1; then
+                      MESSAGES=$(git log "$RANGE" --format=%B)
+                  else
+                      MESSAGES=$(git log -1 --format=%B)
+                  fi
+
+                  METADATA_MARKER="false"
+                  DATA_MARKER="false"
+                  if printf '%s' "$MESSAGES" | grep -qiE '\[metadata\]'; then
+                      METADATA_MARKER="true"
+                      echo "::notice::[metadata] marker found in pushed commits — forcing full metadata deploy."
+                  fi
+                  if printf '%s' "$MESSAGES" | grep -qiE '\[data\]'; then
+                      DATA_MARKER="true"
+                      echo "::notice::[data] marker found in pushed commits — forcing data import."
+                  fi
+
+                  echo "metadata_marker=$METADATA_MARKER" >> "$GITHUB_OUTPUT"
+                  echo "data_marker=$DATA_MARKER" >> "$GITHUB_OUTPUT"
+
+            - name: Check deploy flags
+              id: flags
+              env:
+                  SKIP_DEPLOY: ${{ vars.SKIP_DEPLOY }}
+                  FULL_DEPLOY: ${{ vars.FULL_DEPLOY }}
+                  INPUT_FULL: ${{ inputs.full }}
+                  METADATA_MARKER: ${{ steps.markers.outputs.metadata_marker }}
+              run: |
+                  IS_FULL="false"
+                  if [ "$INPUT_FULL" = "true" ] || [ "$FULL_DEPLOY" = "true" ] || [ "$METADATA_MARKER" = "true" ]; then
+                      IS_FULL="true"
+                  fi
+                  echo "is_full=$IS_FULL" >> "$GITHUB_OUTPUT"
+                  echo "skip_deploy=${SKIP_DEPLOY:-false}" >> "$GITHUB_OUTPUT"
+                  echo "Deploy mode: full=$IS_FULL, skip=${SKIP_DEPLOY:-false}"
+
+            - name: Install sfdx-git-delta
+              if: steps.flags.outputs.is_full != 'true'
+              run: echo y | sf plugins install sfdx-git-delta --silent
+
+            - name: Authenticate
+              env:
+                  SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+                  ORG_ALIAS: ${{ inputs.org_alias }}
+              run: |
+                  printf '%s' "$SFDX_AUTH_URL" > /tmp/sfdx-auth-url.txt
+                  sf org login sfdx-url \
+                      --sfdx-url-file /tmp/sfdx-auth-url.txt \
+                      --alias "$ORG_ALIAS" \
+                      --set-default
+                  rm -f /tmp/sfdx-auth-url.txt
+
+            - name: Generate delta package
+              if: steps.flags.outputs.is_full != 'true'
+              run: |
+                  mkdir -p deploy-package
+                  sf sgd source delta \
+                      --from HEAD~1 \
+                      --to HEAD \
+                      --output-dir deploy-package \
+                      --ignore-whitespace
+
+            - name: Check for changes
+              if: steps.flags.outputs.is_full != 'true'
+              id: check
+              run: |
+                  if [ -f "deploy-package/package/package.xml" ] && grep -q '<types>' deploy-package/package/package.xml; then
+                      echo "has_changes=true" >> "$GITHUB_OUTPUT"
+                      echo "── package.xml ──"
+                      cat deploy-package/package/package.xml
+                  else
+                      echo "has_changes=false" >> "$GITHUB_OUTPUT"
+                      echo "No Salesforce metadata changes detected."
+                  fi
+
+            - name: Deploy
+              if: >-
+                  steps.flags.outputs.skip_deploy != 'true' &&
+                  (steps.flags.outputs.is_full == 'true' || steps.check.outputs.has_changes == 'true')
+              env:
+                  FULL: ${{ steps.flags.outputs.is_full }}
+                  IGNORE_ERRORS: ${{ inputs.ignore_deploy_errors }}
+                  ORG_ALIAS: ${{ inputs.org_alias }}
+                  WAIT: ${{ vars.SF_WAIT_TIMEOUT || '30' }}
+              run: |
+                  if [ "$FULL" = "true" ]; then
+                      sf project deploy start \
+                          --target-org "$ORG_ALIAS" \
+                          --test-level RunLocalTests \
+                          --ignore-conflicts \
+                          --wait "$WAIT"
+                  else
+                      DEPLOY_FLAGS=(
+                          --manifest deploy-package/package/package.xml
+                          --target-org "$ORG_ALIAS"
+                          --test-level RunLocalTests
+                          --ignore-conflicts
+                          --wait "$WAIT"
+                      )
+                      if [ "$IGNORE_ERRORS" = "true" ]; then
+                          DEPLOY_FLAGS+=(--ignore-warnings --ignore-errors)
+                      fi
+                      if [ -f "deploy-package/destructiveChanges/destructiveChanges.xml" ] && grep -q '<types>' "deploy-package/destructiveChanges/destructiveChanges.xml"; then
+                          DEPLOY_FLAGS+=(--post-destructive-changes deploy-package/destructiveChanges/destructiveChanges.xml)
+                      fi
+                      sf project deploy start "${DEPLOY_FLAGS[@]}"
+                  fi
+
+            # --- Data Import ---
+
+            - name: Check for data changes
+              id: data-check
+              env:
+                  SKIP_DATA: ${{ vars.SKIP_DATA }}
+                  FULL_DATA: ${{ vars.FULL_DATA }}
+                  IMPORT_DATA: ${{ inputs.import_data }}
+                  DATA_MARKER: ${{ steps.markers.outputs.data_marker }}
+              run: |
+                  if [ "$SKIP_DATA" = "true" ]; then
+                      echo "should_import=false" >> "$GITHUB_OUTPUT"
+                      echo "Data import skipped (SKIP_DATA=true)."
+                      exit 0
+                  fi
+
+                  if [ "$IMPORT_DATA" = "true" ] || [ "$FULL_DATA" = "true" ] || [ "$DATA_MARKER" = "true" ]; then
+                      echo "should_import=true" >> "$GITHUB_OUTPUT"
+                      echo "Data import forced (import_data=$IMPORT_DATA, FULL_DATA=$FULL_DATA, data_marker=$DATA_MARKER)."
+                      exit 0
+                  fi
+
+                  DATA_DIR=$(node -e "process.stdout.write(require('./config/import.json')._dataDir)")
+                  if git diff --name-only HEAD~1..HEAD -- "$DATA_DIR/" config/import.json | grep -q .; then
+                      echo "should_import=true" >> "$GITHUB_OUTPUT"
+                      echo "── Data files changed ──"
+                      git diff --name-only HEAD~1..HEAD -- "$DATA_DIR/" config/import.json
+                  else
+                      echo "should_import=false" >> "$GITHUB_OUTPUT"
+                      echo "No data file changes detected."
+                  fi
+
+            - name: Init submodules
+              if: steps.data-check.outputs.should_import == 'true'
+              run: git submodule update --init --recursive
+
+            - name: Install SFDMU
+              if: steps.data-check.outputs.should_import == 'true'
+              run: echo y | sf plugins install sfdmu --silent
+
+            - name: Install dependencies
+              if: steps.data-check.outputs.should_import == 'true'
+              run: npm ci
+
+            - name: Import TPM data
+              if: steps.data-check.outputs.should_import == 'true'
+              env:
+                  TARGET_ALIAS: ${{ inputs.org_alias }}
+                  DELETE_FLAG: ${{ (inputs.delete_old_data == true || vars.DELETE_OLD_DATA == 'true') && '--delete' || '' }}
+                  SALES_ORGS: ${{ vars.SALES_ORGS }}
+              run: |
+                  SALES_ORGS="$(echo "$SALES_ORGS" | xargs)"
+                  IMPORT_ARGS=(import -t "$TARGET_ALIAS" --verbose)
+                  if [ -n "$SALES_ORGS" ]; then
+                      IMPORT_ARGS+=(--source-orgs "$SALES_ORGS")
+                  fi
+                  npm run data -- "${IMPORT_ARGS[@]}" $DELETE_FLAG
+
+            - name: Upload data import logs
+              if: steps.data-check.outputs.should_import == 'true' && always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: data-import-logs-${{ inputs.org_alias }}
+                  path: tmp/**/logs/*.log
+                  if-no-files-found: ignore
+                  retention-days: 14

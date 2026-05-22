@@ -1,0 +1,327 @@
+# Validate every pull request targeting dev, qa, uat, or main.
+# Runs LWC Jest tests, then generates a delta package from the diff
+# and dry-run deploys it to the corresponding Salesforce org.
+#
+# Respects environment variables:
+#   SKIP_VALIDATION — skip the Salesforce dry-run deploy
+#   SKIP_NOTIFY     — skip Slack notification (success and failure)
+
+name: Validate PR
+
+on:
+    pull_request:
+        # Code events trigger full validation; metadata events (assignment,
+        # reviewer changes) skip validation but still re-post the Slack
+        # notification so the right people get tagged.
+        types:
+            - opened
+            - reopened
+            - synchronize
+            - ready_for_review
+            - assigned
+            - unassigned
+            - review_requested
+            - review_request_removed
+        branches:
+            - dev
+            - qa
+            - uat
+            - main
+
+concurrency:
+    group: validate-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+    actions: read
+    checks: write
+    pull-requests: read
+
+jobs:
+    # ── Classify the event: 'code' triggers validation, 'metadata' only re-notifies.
+    event-kind:
+        name: Classify Event
+        runs-on: ubuntu-latest
+        outputs:
+            kind: ${{ steps.classify.outputs.kind }}
+        steps:
+            - name: Classify
+              id: classify
+              env:
+                  ACTION: ${{ github.event.action }}
+              run: |
+                  case "$ACTION" in
+                      opened|reopened|synchronize|ready_for_review)
+                          echo "kind=code" >> "$GITHUB_OUTPUT"
+                          ;;
+                      assigned|unassigned|review_requested|review_request_removed)
+                          echo "kind=metadata" >> "$GITHUB_OUTPUT"
+                          ;;
+                      *)
+                          echo "kind=code" >> "$GITHUB_OUTPUT"
+                          ;;
+                  esac
+
+    # ── Job 0: PR Target Validation ─────────────────────────────────────
+    check-pr-target:
+        name: PR Target Check
+        needs: event-kind
+        if: needs.event-kind.outputs.kind == 'code'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Validate PR target branch
+              env:
+                  SOURCE: ${{ github.head_ref }}
+                  TARGET: ${{ github.base_ref }}
+              run: |
+                  echo "Source: $SOURCE → Target: $TARGET"
+
+                  # feature/* branches can only target dev
+                  if [[ "$SOURCE" == feature/* && "$TARGET" != "dev" ]]; then
+                      echo "::error::feature/* branches can only create PRs into 'dev'. Got target: $TARGET"
+                      exit 1
+                  fi
+
+                  # hotfix/* branches can target any protected branch
+                  if [[ "$SOURCE" == hotfix/* ]]; then
+                      if [[ "$TARGET" != "main" && "$TARGET" != "dev" && "$TARGET" != "qa" && "$TARGET" != "uat" ]]; then
+                          echo "::error::hotfix/* branches can only target main, dev, qa, or uat. Got target: $TARGET"
+                          exit 1
+                      fi
+                  fi
+
+                  echo "PR target validation passed."
+
+    # ── Already-merged check ─────────────────────────────────────────────
+    # If the PR's HEAD commit is already reachable from the base branch,
+    # the changes are effectively already merged (e.g., via a backmerge
+    # PR or a direct push that brought them in). Skip the heavy
+    # validation jobs — they'd just re-validate the same state.
+    check-merge-status:
+        name: Already-Merged Check
+        needs: check-pr-target
+        runs-on: ubuntu-latest
+        outputs:
+            already_merged: ${{ steps.check.outputs.already_merged }}
+        steps:
+            - name: Checkout (full history)
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Check whether HEAD is already in base
+              id: check
+              env:
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  BASE_REF: ${{ github.event.pull_request.base.ref }}
+              run: |
+                  git fetch origin "$BASE_REF" --quiet
+                  if git merge-base --is-ancestor "$HEAD_SHA" "origin/$BASE_REF"; then
+                      echo "::notice::HEAD $HEAD_SHA is already reachable from origin/$BASE_REF. Changes were merged via another path — skipping validation."
+                      echo "already_merged=true" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "HEAD $HEAD_SHA is not yet in origin/$BASE_REF. Proceeding with validation."
+                      echo "already_merged=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+    # ── Job 1a: LWC Jest Tests ───────────────────────────────────────────
+    lwc-tests:
+        needs: check-merge-status
+        if: needs.check-merge-status.outputs.already_merged != 'true'
+        name: LWC Jest Tests
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '23'
+                  cache: 'npm'
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Run LWC tests
+              run: npm run test:lwc
+
+    # ── Job 1b: Apex tests via aer (runs in parallel with lwc-tests) ─────
+    # aer runs the Apex tests locally without deploying to an org.
+    # Binary lives at bin/aer (LFS-tracked) and needs AER_LICENSE_KEY
+    # configured as a repo secret.
+    aer-validate:
+        needs: check-merge-status
+        if: needs.check-merge-status.outputs.already_merged != 'true'
+        name: Apex Validation (aer)
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout (with LFS for bin/aer)
+              uses: actions/checkout@v4
+              with:
+                  lfs: true
+
+            - name: Run Apex tests
+              env:
+                  AER_LICENSE_KEY: ${{ secrets.AER_LICENSE_KEY }}
+              run: |
+                  if [ -z "$AER_LICENSE_KEY" ]; then
+                      echo "::error::AER_LICENSE_KEY secret is not configured for this repository."
+                      exit 1
+                  fi
+                  chmod +x bin/aer
+                  mkdir -p ~/.local/share/aer
+                  printf '%s' "$AER_LICENSE_KEY" > ~/.local/share/aer/license.key
+                  export PATH="$PWD/bin:$PATH"
+                  # aer detects GITHUB_ACTIONS and changes output format;
+                  # temporarily clear it so its native renderer is used.
+                  _GA="${GITHUB_ACTIONS:-}"
+                  unset GITHUB_ACTIONS
+                  bash scripts/shell/run_aer_suites.sh
+                  export GITHUB_ACTIONS="$_GA"
+
+    # ── Job 2: Salesforce Delta Validation ───────────────────────────────
+    validate-sf:
+        name: Salesforce Validation
+        runs-on: ubuntu-latest
+        needs: [lwc-tests, aer-validate]
+        environment: ${{ github.event.pull_request.base.ref == 'main' && 'prod' || github.event.pull_request.base.ref }}
+        outputs:
+            skip_notify: ${{ steps.flags.outputs.skip_notify }}
+        steps:
+            - name: Check flags
+              id: flags
+              env:
+                  SKIP_VALIDATION: ${{ vars.SKIP_VALIDATION }}
+                  SKIP_NOTIFY: ${{ vars.SKIP_NOTIFY }}
+              run: |
+                  echo "skip=${SKIP_VALIDATION:-false}" >> "$GITHUB_OUTPUT"
+                  echo "skip_notify=${SKIP_NOTIFY:-false}" >> "$GITHUB_OUTPUT"
+                  if [ "$SKIP_VALIDATION" = "true" ]; then
+                      echo "::notice::Salesforce validation skipped (SKIP_VALIDATION=true)"
+                  fi
+
+            - name: Checkout (full history)
+              if: steps.flags.outputs.skip != 'true'
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Node.js
+              if: steps.flags.outputs.skip != 'true'
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '23'
+                  cache: 'npm'
+
+            - name: Install Salesforce CLI
+              if: steps.flags.outputs.skip != 'true'
+              run: npm install --global @salesforce/cli
+
+            - name: Install sfdx-git-delta
+              if: steps.flags.outputs.skip != 'true'
+              run: echo y | sf plugins install sfdx-git-delta --silent
+
+            - name: Authenticate to target org
+              if: steps.flags.outputs.skip != 'true'
+              env:
+                  SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+              run: |
+                  if [ -z "$SFDX_AUTH_URL" ]; then
+                      echo "::error::SFDX_AUTH_URL is not set for this environment"
+                      exit 1
+                  fi
+                  printf '%s' "$SFDX_AUTH_URL" > /tmp/sfdx-auth-url.txt
+                  sf org login sfdx-url \
+                      --sfdx-url-file /tmp/sfdx-auth-url.txt \
+                      --alias target-org \
+                      --set-default
+                  rm -f /tmp/sfdx-auth-url.txt
+
+            - name: Generate delta package
+              if: steps.flags.outputs.skip != 'true'
+              env:
+                  BASE_REF: ${{ github.event.pull_request.base.ref }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  mkdir -p delta
+                  sf sgd source delta \
+                      --from "origin/$BASE_REF" \
+                      --to "$HEAD_SHA" \
+                      --output-dir delta \
+                      --ignore-whitespace
+                  echo "── package.xml ──"
+                  if [ -f delta/package/package.xml ]; then
+                      cat delta/package/package.xml
+                  else
+                      echo "No delta package.xml generated (no metadata changes detected)."
+                  fi
+                  echo ""
+                  if [ -f delta/destructiveChanges/destructiveChanges.xml ]; then
+                      echo "── destructiveChanges.xml ──"
+                      cat delta/destructiveChanges/destructiveChanges.xml
+                      echo ""
+                      echo "::warning::Destructive changes detected. Review destructiveChanges.xml carefully before merging."
+                  fi
+
+            - name: Dry-run deploy (validate)
+              if: steps.flags.outputs.skip != 'true'
+              env:
+                  WAIT: ${{ vars.SF_WAIT_TIMEOUT || '30' }}
+              run: |
+                  if [ ! -f delta/package/package.xml ] || ! grep -q '<types>' delta/package/package.xml; then
+                      echo "No metadata changes to validate. Skipping deployment."
+                      exit 0
+                  fi
+
+                  DEPLOY_FLAGS=(
+                      --manifest delta/package/package.xml
+                      --dry-run
+                      --wait "$WAIT"
+                      --test-level RunLocalTests
+                      --target-org target-org
+                      --verbose
+                  )
+
+                  if [ -f delta/destructiveChanges/destructiveChanges.xml ] && grep -q '<types>' delta/destructiveChanges/destructiveChanges.xml; then
+                      DEPLOY_FLAGS+=(--post-destructive-changes delta/destructiveChanges/destructiveChanges.xml)
+                      echo "::warning::Deploying with destructive changes included in validation."
+                  fi
+
+                  sf project deploy start "${DEPLOY_FLAGS[@]}"
+
+            - name: Upload delta artifacts
+              if: always() && steps.flags.outputs.skip != 'true'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: delta-package
+                  path: delta/
+                  if-no-files-found: ignore
+
+    # ── Slack notification ─────────────────────────────────────────────
+    # Code events (push, open, etc.): post validation result. Failure tags
+    # the PR author; success tags repo admins + assignees + requested
+    # reviewers so they review/merge.
+    # Metadata events (assigned, review_requested, etc.): skip validation
+    # but post an update tagging the (new) assignees/reviewers so they see
+    # the PR is waiting on them.
+    notify:
+        needs: [event-kind, check-pr-target, check-merge-status, lwc-tests, aer-validate, validate-sf]
+        if: |
+            always()
+            && !cancelled()
+            && needs.validate-sf.outputs.skip_notify != 'true'
+        uses: ./.github/workflows/slack-notify.yml
+        with:
+            workflow_name: ${{ needs.event-kind.outputs.kind == 'metadata' && 'PR Updated' || (needs.check-merge-status.outputs.already_merged == 'true' && 'PR Validation (Skipped — Already Merged)' || 'PR Validation') }}
+            result: ${{ needs.event-kind.outputs.kind == 'metadata' && 'success' || (needs.check-merge-status.outputs.already_merged == 'true' && 'success' || ((needs.check-pr-target.result == 'success' && needs.lwc-tests.result == 'success' && needs.aer-validate.result == 'success' && needs.validate-sf.result == 'success') && 'success' || 'failure')) }}
+            pr_author: ${{ github.event.pull_request.user.login }}
+            pr_number: ${{ github.event.pull_request.number }}
+            pr_url: ${{ github.event.pull_request.html_url }}
+            assignees: ${{ join(github.event.pull_request.assignees.*.login, ' ') }}
+            reviewers: ${{ join(github.event.pull_request.requested_reviewers.*.login, ' ') }}
+            mention_reviewers: true
+        secrets:
+            SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+            SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}

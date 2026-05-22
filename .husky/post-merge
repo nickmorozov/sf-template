@@ -1,0 +1,5 @@
+# ── Restore branch-specific org config after pull ─────────────────
+# When GitHub merges overwrite org config (e.g., PR merge dev→qa puts
+# bumblebee-dev values on qa), pulling those changes triggers this hook.
+# Rewrites files in the working tree so your local env points to the right org.
+scripts/shell/restore-org-config.sh --no-stage

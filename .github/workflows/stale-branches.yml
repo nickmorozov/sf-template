@@ -1,0 +1,130 @@
+# Detect stale feature branches that have fallen behind dev.
+# Runs on weekdays at 9 AM ET (14:00 UTC) and posts warnings
+# on open PRs for branches that need to merge dev.
+
+name: Stale Branch Detection
+
+on:
+    schedule:
+        - cron: '0 14 * * 1-5'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    pull-requests: write
+
+jobs:
+    # ── Check for stale feature branches ────────────────────────────────
+    check-stale:
+        name: Check Stale Branches
+        runs-on: ubuntu-latest
+        outputs:
+            stale: ${{ steps.stale-check.outputs.stale }}
+        steps:
+            - name: Checkout (full history)
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Check feature branches against dev
+              id: stale-check
+              run: |
+                  git fetch --all --prune
+
+                  STALE=0
+                  NOW_EPOCH=$(date +%s)
+
+                  echo "## Stale Feature Branch Report" >> "$GITHUB_STEP_SUMMARY"
+                  echo "" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| Branch | Behind dev | Last Activity |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "|--------|-----------|---------------|" >> "$GITHUB_STEP_SUMMARY"
+
+                  FOUND_ANY=0
+
+                  for branch in $(git branch -r --list 'origin/feature/*'); do
+                      BEHIND=$(git rev-list --count "$branch..origin/dev" 2>/dev/null || echo 0)
+
+                      if [ "$BEHIND" -ge 5 ]; then
+                          FOUND_ANY=1
+                          STALE=1
+
+                          LAST_DATE=$(git log -1 --format='%ci' "$branch")
+                          LAST_EPOCH=$(date -d "$LAST_DATE" +%s 2>/dev/null || date -j -f '%Y-%m-%d %H:%M:%S %z' "$LAST_DATE" +%s 2>/dev/null || echo "$NOW_EPOCH")
+                          DAYS_INACTIVE=$(( (NOW_EPOCH - LAST_EPOCH) / 86400 ))
+                          PRETTY_DATE=$(git log -1 --format='%cr' "$branch")
+                          BRANCH_NAME="${branch#origin/}"
+
+                          echo "| \`$BRANCH_NAME\` | $BEHIND commits | $PRETTY_DATE ($DAYS_INACTIVE days) |" >> "$GITHUB_STEP_SUMMARY"
+
+                          # Track branches for PR comment step
+                          echo "$BRANCH_NAME|$BEHIND|$DAYS_INACTIVE" >> /tmp/stale-branches.txt
+
+                          # Flag cleanup candidates: 15+ behind with 5+ days inactive
+                          if [ "$BEHIND" -ge 15 ] && [ "$DAYS_INACTIVE" -ge 5 ]; then
+                              echo "| \`$BRANCH_NAME\` | $BEHIND commits | $DAYS_INACTIVE days inactive |" >> /tmp/cleanup-candidates.txt
+                          fi
+                      fi
+                  done
+
+                  if [ "$FOUND_ANY" -eq 0 ]; then
+                      echo "| _No stale branches found_ | - | - |" >> "$GITHUB_STEP_SUMMARY"
+                  fi
+
+                  # Append cleanup candidates section if any exist
+                  if [ -f /tmp/cleanup-candidates.txt ]; then
+                      echo "" >> "$GITHUB_STEP_SUMMARY"
+                      echo "### Cleanup Candidates (15+ behind, 5+ days inactive)" >> "$GITHUB_STEP_SUMMARY"
+                      echo "" >> "$GITHUB_STEP_SUMMARY"
+                      echo "| Branch | Behind dev | Days Inactive |" >> "$GITHUB_STEP_SUMMARY"
+                      echo "|--------|-----------|---------------|" >> "$GITHUB_STEP_SUMMARY"
+                      cat /tmp/cleanup-candidates.txt >> "$GITHUB_STEP_SUMMARY"
+                  fi
+
+                  echo "stale=$STALE" >> "$GITHUB_OUTPUT"
+
+            - name: Post PR comments for stale branches
+              if: steps.stale-check.outputs.stale == '1'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const fs = require('fs');
+                      const lines = fs.readFileSync('/tmp/stale-branches.txt', 'utf8').trim().split('\n');
+
+                      for (const line of lines) {
+                          const [branchName, behind, daysInactive] = line.split('|');
+
+                          // Find open PRs for this branch
+                          const pulls = await github.rest.pulls.list({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              state: 'open',
+                              head: `${context.repo.owner}:${branchName}`
+                          });
+
+                          for (const pr of pulls.data) {
+                              const body = [
+                                  `### Stale Branch Warning`,
+                                  ``,
+                                  `This branch (\`${branchName}\`) is **${behind} commits behind \`dev\`**` +
+                                  ` with ${daysInactive} day(s) of inactivity.`,
+                                  ``,
+                                  `Please update your branch to avoid merge conflicts:`,
+                                  `\`\`\`bash`,
+                                  `git checkout ${branchName}`,
+                                  `git merge dev`,
+                                  `git push`,
+                                  `\`\`\``,
+                                  ``,
+                                  `_This comment was posted automatically by the Stale Branch Detection workflow._`
+                              ].join('\n');
+
+                              await github.rest.issues.createComment({
+                                  owner: context.repo.owner,
+                                  repo: context.repo.repo,
+                                  issue_number: pr.number,
+                                  body: body
+                              });
+
+                              console.log(`Posted stale branch warning on PR #${pr.number} for ${branchName}`);
+                          }
+                      }

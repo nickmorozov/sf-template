@@ -1,0 +1,63 @@
+# Deploy to QA on every push to the qa branch.
+
+name: Deploy to QA
+
+on:
+    push:
+        branches:
+            - qa
+    workflow_dispatch:
+        inputs:
+            full:
+                description: 'Deploy all metadata (skip delta)'
+                type: boolean
+                default: false
+            import_data:
+                description: 'Import TPM template data after deploy'
+                type: boolean
+                default: false
+            delete_old_data:
+                description: 'Delete old data before importing (clean import)'
+                type: boolean
+                default: false
+
+concurrency:
+    group: deploy-qa
+    cancel-in-progress: false
+
+permissions:
+    contents: read
+    actions: read
+    pull-requests: read
+
+jobs:
+    admin-guard:
+        if: github.event_name == 'push'
+        uses: ./.github/workflows/admin-guard.yml
+
+    deploy-qa:
+        needs: admin-guard
+        if: always() && (needs.admin-guard.result == 'success' || needs.admin-guard.result == 'skipped')
+        uses: ./.github/workflows/sf-deploy.yml
+        with:
+            org_name: QA
+            org_alias: qa
+            environment: qa
+            full: ${{ inputs.full == true }}
+            import_data: ${{ inputs.import_data == true }}
+            delete_old_data: ${{ inputs.delete_old_data == true }}
+        secrets: inherit
+
+    notify:
+        needs: [admin-guard, deploy-qa]
+        if: >-
+            always() &&
+            needs.deploy-qa.outputs.skip_notify != 'true' &&
+            (needs.admin-guard.result == 'failure' || needs.deploy-qa.result != 'skipped')
+        uses: ./.github/workflows/slack-notify.yml
+        with:
+            workflow_name: Deploy to QA
+            result: ${{ needs.deploy-qa.result }}
+        secrets:
+            SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+            SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}

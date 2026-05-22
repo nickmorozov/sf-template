@@ -1,0 +1,269 @@
+# Reusable workflow: Send threaded Slack notification for workflow results.
+# Posts all notifications as replies under a pinned "Pipeline" message to reduce
+# channel noise. Uses Slack Web API (Bot Token) instead of Incoming Webhook.
+#
+# Prerequisites:
+#   - Slack App with bot scopes: chat:write, channels:history, channels:read, pins:read, pins:write
+#   - Bot invited to the target channel
+#   - Repo secrets: SLACK_BOT_TOKEN, SLACK_CHANNEL_ID
+
+name: Slack Notification
+
+on:
+    workflow_call:
+        inputs:
+            workflow_name:
+                required: true
+                type: string
+            result:
+                required: true
+                type: string
+            pr_author:
+                required: false
+                type: string
+                description: 'Explicit PR author GitHub username (e.g. from pull_request event payload)'
+            pr_number:
+                required: false
+                type: string
+                description: 'PR number to include in the message (link to PR)'
+            pr_url:
+                required: false
+                type: string
+                description: 'PR HTML URL (link to PR)'
+            mention_reviewers:
+                required: false
+                type: boolean
+                default: false
+                description: 'On success, mention everyone in config/repo-admins.json so they review/merge'
+            assignees:
+                required: false
+                type: string
+                default: ''
+                description: 'Space-separated GitHub usernames assigned to the PR (tagged on success).'
+            reviewers:
+                required: false
+                type: string
+                default: ''
+                description: 'Space-separated GitHub usernames requested as reviewers on the PR (tagged on success).'
+        secrets:
+            SLACK_BOT_TOKEN:
+                required: true
+            SLACK_CHANNEL_ID:
+                required: true
+
+jobs:
+    notify:
+        name: Send Slack Notification
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout (config files)
+              uses: actions/checkout@v4
+              with:
+                  sparse-checkout: |
+                      config/slack-users.json
+                      config/repo-admins.json
+                  sparse-checkout-cone-mode: false
+
+            - name: Find or create Pipeline thread
+              id: thread
+              env:
+                  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+                  SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+                  REPO: ${{ github.repository }}
+              run: |
+                  MARKER="__PIPELINE_THREAD__"
+
+                  # Search pinned messages for the pipeline thread marker
+                  PINS=$(curl -sf \
+                      -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                      "https://slack.com/api/pins.list?channel=$SLACK_CHANNEL_ID")
+
+                  if [ "$(echo "$PINS" | jq -r '.ok')" != "true" ]; then
+                      echo "::error::Failed to list pins: $(echo "$PINS" | jq -r '.error // "unknown"')"
+                      exit 1
+                  fi
+
+                  # Look for an existing pinned pipeline thread
+                  THREAD_TS=$(echo "$PINS" | jq -r \
+                      --arg marker "$MARKER" \
+                      '[.items[] | select(.message.text | contains($marker))] | first | .message.ts // empty')
+
+                  if [ -n "$THREAD_TS" ]; then
+                      echo "Found existing Pipeline thread: $THREAD_TS"
+                  else
+                      echo "No Pipeline thread found — creating one"
+                      POST=$(curl -sf -X POST \
+                          -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                          -H "Content-Type: application/json" \
+                          -d "$(jq -n \
+                              --arg channel "$SLACK_CHANNEL_ID" \
+                              --arg text ":package: *Pipeline Notifications* — ${REPO}\n${MARKER}" \
+                              '{channel: $channel, text: $text}')" \
+                          "https://slack.com/api/chat.postMessage")
+
+                      if [ "$(echo "$POST" | jq -r '.ok')" != "true" ]; then
+                          echo "::error::Failed to create Pipeline thread: $(echo "$POST" | jq -r '.error // "unknown"')"
+                          exit 1
+                      fi
+
+                      THREAD_TS=$(echo "$POST" | jq -r '.ts')
+                      echo "Created Pipeline thread: $THREAD_TS"
+
+                      # Pin the new message
+                      PIN_RESULT=$(curl -sf -X POST \
+                          -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                          -H "Content-Type: application/json" \
+                          -d "$(jq -n \
+                              --arg channel "$SLACK_CHANNEL_ID" \
+                              --arg timestamp "$THREAD_TS" \
+                              '{channel: $channel, timestamp: $timestamp}')" \
+                          "https://slack.com/api/pins.add")
+
+                      if [ "$(echo "$PIN_RESULT" | jq -r '.ok')" != "true" ]; then
+                          echo "::warning::Failed to pin Pipeline thread: $(echo "$PIN_RESULT" | jq -r '.error // "unknown"')"
+                      fi
+                  fi
+
+                  echo "thread_ts=$THREAD_TS" >> "$GITHUB_OUTPUT"
+
+            - name: Resolve PR author
+              id: author
+              env:
+                  PR_AUTHOR_INPUT: ${{ inputs.pr_author }}
+                  ACTOR: ${{ github.actor }}
+                  EVENT_NAME: ${{ github.event_name }}
+                  COMMIT_MSG: ${{ github.event.head_commit.message }}
+                  GH_TOKEN: ${{ github.token }}
+                  REPO: ${{ github.repository }}
+              run: |
+                  # 1. Explicit input (from pull_request events)
+                  if [ -n "$PR_AUTHOR_INPUT" ]; then
+                      echo "author=$PR_AUTHOR_INPUT" >> "$GITHUB_OUTPUT"
+                      echo "Resolved PR author from input: $PR_AUTHOR_INPUT"
+                      exit 0
+                  fi
+
+                  # 2. Push event — extract PR number from merge commit message
+                  if [ "$EVENT_NAME" = "push" ] && [ -n "$COMMIT_MSG" ]; then
+                      PR_NUM=$(echo "$COMMIT_MSG" | grep -oP 'Merge pull request #\K[0-9]+' | head -1)
+                      if [ -n "$PR_NUM" ]; then
+                          PR_AUTHOR=$(gh api "repos/$REPO/pulls/$PR_NUM" --jq '.user.login' 2>/dev/null || true)
+                          if [ -n "$PR_AUTHOR" ]; then
+                              echo "author=$PR_AUTHOR" >> "$GITHUB_OUTPUT"
+                              echo "Resolved PR author from merge commit (#$PR_NUM): $PR_AUTHOR"
+                              exit 0
+                          fi
+                      fi
+                  fi
+
+                  # 3. Fallback to github.actor
+                  echo "author=$ACTOR" >> "$GITHUB_OUTPUT"
+                  echo "Fallback to github.actor: $ACTOR"
+
+            - name: Post threaded notification
+              env:
+                  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+                  SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+                  THREAD_TS: ${{ steps.thread.outputs.thread_ts }}
+                  WORKFLOW_NAME: ${{ inputs.workflow_name }}
+                  RESULT: ${{ inputs.result }}
+                  AUTHOR: ${{ steps.author.outputs.author }}
+                  PR_NUMBER: ${{ inputs.pr_number }}
+                  PR_URL: ${{ inputs.pr_url }}
+                  MENTION_REVIEWERS: ${{ inputs.mention_reviewers }}
+                  ASSIGNEES: ${{ inputs.assignees }}
+                  REVIEWERS: ${{ inputs.reviewers }}
+                  REF_NAME: ${{ github.ref_name }}
+                  SHA: ${{ github.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  # Look up Slack member ID for the author
+                  SLACK_ID=$(jq -r --arg user "$AUTHOR" '.[$user] // empty' config/slack-users.json)
+                  if [ -n "$SLACK_ID" ]; then
+                      MENTION="<@$SLACK_ID>"
+                  else
+                      MENTION="$AUTHOR"
+                  fi
+
+                  SHORT_SHA="${SHA:0:7}"
+
+                  if [ "$RESULT" = "failure" ]; then
+                      EMOJI=":red_circle:"
+                      STATUS="Failed"
+                  else
+                      EMOJI=":white_check_mark:"
+                      STATUS="Succeeded"
+                  fi
+
+                  # Build optional reviewer mentions (only on success when flag set).
+                  # Union of: repo admins (from config/repo-admins.json) + PR assignees + requested reviewers.
+                  # Dedup, skip the PR author so we don't double-tag them.
+                  REVIEWER_LINE=""
+                  if [ "$RESULT" = "success" ] && [ "$MENTION_REVIEWERS" = "true" ]; then
+                      # Collect candidate usernames into a temp file (one per line)
+                      CANDIDATES=$(mktemp)
+                      if [ -f config/repo-admins.json ]; then
+                          jq -r '.[]' config/repo-admins.json >> "$CANDIDATES"
+                      fi
+                      for u in $ASSIGNEES $REVIEWERS; do
+                          echo "$u" >> "$CANDIDATES"
+                      done
+
+                      MENTIONS=""
+                      SEEN=$(mktemp)
+                      while IFS= read -r user; do
+                          [ -z "$user" ] && continue
+                          # Skip duplicates
+                          if grep -Fxq "$user" "$SEEN"; then
+                              continue
+                          fi
+                          echo "$user" >> "$SEEN"
+                          # Skip the PR author so we don't double-tag them
+                          if [ "$user" = "$AUTHOR" ]; then
+                              continue
+                          fi
+                          USER_SLACK_ID=$(jq -r --arg user "$user" '.[$user] // empty' config/slack-users.json)
+                          if [ -n "$USER_SLACK_ID" ]; then
+                              MENTIONS="$MENTIONS <@$USER_SLACK_ID>"
+                          else
+                              MENTIONS="$MENTIONS @$user"
+                          fi
+                      done < "$CANDIDATES"
+                      rm -f "$CANDIDATES" "$SEEN"
+
+                      MENTIONS="${MENTIONS# }"
+                      if [ -n "$MENTIONS" ]; then
+                          REVIEWER_LINE=$(printf '\nReady to merge — %s' "$MENTIONS")
+                      fi
+                  fi
+
+                  # Build optional PR link
+                  PR_LINE=""
+                  if [ -n "$PR_NUMBER" ] && [ -n "$PR_URL" ]; then
+                      PR_LINE=$(printf '\nPR: <%s|#%s>' "$PR_URL" "$PR_NUMBER")
+                  fi
+
+                  TEXT=$(printf '%s\n%s\n%s%s%s\n%s' \
+                      "$EMOJI *${WORKFLOW_NAME} ${STATUS}*" \
+                      "Branch: \`${REF_NAME}\` | Commit: \`${SHORT_SHA}\`" \
+                      "Author: ${MENTION}" \
+                      "${PR_LINE}" \
+                      "${REVIEWER_LINE}" \
+                      "<${RUN_URL}|View run>")
+
+                  RESPONSE=$(curl -sf -X POST \
+                      -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                      -H "Content-Type: application/json" \
+                      -d "$(jq -n \
+                          --arg channel "$SLACK_CHANNEL_ID" \
+                          --arg text "$TEXT" \
+                          --arg thread_ts "$THREAD_TS" \
+                          '{channel: $channel, text: $text, thread_ts: $thread_ts}')" \
+                      "https://slack.com/api/chat.postMessage")
+
+                  if [ "$(echo "$RESPONSE" | jq -r '.ok')" != "true" ]; then
+                      echo "::error::Failed to post Slack notification: $(echo "$RESPONSE" | jq -r '.error // "unknown"')"
+                      exit 1
+                  fi
+
+                  echo "Notification posted to thread $THREAD_TS"

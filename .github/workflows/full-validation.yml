@@ -1,0 +1,46 @@
+# Weekly full-validation orchestrator.
+# Every Monday at 6 AM ET (11:00 UTC) this workflow dispatches validate-org.yml
+# on each target branch (dev, qa, uat, main) so each run uses the correct
+# branch code and environment secrets. Can also be triggered manually.
+
+name: Full Validation
+
+on:
+    schedule:
+        - cron: '0 11 * * 1'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    actions: write
+
+jobs:
+    dispatch:
+        name: Dispatch ${{ matrix.org }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - org: DEV
+                      branch: dev
+                    - org: INT
+                      branch: dev
+                    - org: QA
+                      branch: qa
+                    - org: UAT
+                      branch: uat
+                    - org: PROD
+                      branch: main
+        steps:
+            - name: Dispatch validation for ${{ matrix.org }} on ${{ matrix.branch }}
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REPO: ${{ github.repository }}
+                  BRANCH: ${{ matrix.branch }}
+                  ORG: ${{ matrix.org }}
+              run: |
+                  gh workflow run validate-org.yml \
+                      --repo "$REPO" \
+                      --ref "$BRANCH" \
+                      -f org="$ORG"

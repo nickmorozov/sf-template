@@ -1,0 +1,47 @@
+# Reusable workflow: Check that the push is authorized.
+# Allows: (1) admins listed in config/repo-admins.json, or
+#         (2) any push whose HEAD commit came from a merged pull request.
+# Called by deploy workflows to emulate branch protection.
+
+name: Admin Guard
+
+on:
+    workflow_call: {}
+
+permissions:
+    contents: read
+    pull-requests: read
+
+jobs:
+    check:
+        name: Admin Guard
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  sparse-checkout: config/repo-admins.json
+                  sparse-checkout-cone-mode: false
+
+            - name: Check authorization
+              env:
+                  ACTOR: ${{ github.actor }}
+                  SHA: ${{ github.sha }}
+                  REPO: ${{ github.repository }}
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  if jq -e --arg actor "$ACTOR" '.[] | select(. == $actor)' config/repo-admins.json > /dev/null 2>&1; then
+                      echo "✅ $ACTOR is an authorized admin."
+                      exit 0
+                  fi
+
+                  echo "ℹ️  $ACTOR is not in repo-admins.json — checking whether commit $SHA came from a merged PR…"
+                  prs=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '[.[] | select(.merged_at != null)] | length' 2>/dev/null || echo "0")
+
+                  if [ "${prs:-0}" -gt 0 ]; then
+                      echo "✅ Commit $SHA came from a merged pull request. Proceeding."
+                      exit 0
+                  fi
+
+                  echo "::error::$ACTOR is not authorized to push directly to protected branches, and commit $SHA is not associated with a merged PR. Use a feature/* or hotfix/* branch and create a PR."
+                  exit 1

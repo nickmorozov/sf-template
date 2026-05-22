@@ -1,0 +1,76 @@
+# Scheduled sandbox backup orchestrator.
+# Every weekday at midnight ET (05:00 UTC) this workflow dispatches
+# sf-backup.yml on each org's source branch so each run uses the correct
+# branch code and environment secrets. Can also be triggered manually.
+
+name: Backup Sandboxes
+
+on:
+    schedule:
+        - cron: '0 5 * * 1-5'
+    workflow_dispatch:
+        inputs:
+            org:
+                description: 'Org to backup (leave empty for all)'
+                type: choice
+                options:
+                    - ALL
+                    - DEV
+                    - INT
+                    - QA
+                    - UAT
+                    - PROD
+                default: ALL
+
+permissions:
+    contents: write
+    actions: write
+
+jobs:
+    dispatch:
+        name: Dispatch ${{ matrix.org_name }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - org_name: DEV
+                      org_alias: dev
+                      source_branch: dev
+                      backup_branch: backup/dev
+                    - org_name: INT
+                      org_alias: int
+                      source_branch: dev
+                      backup_branch: backup/int
+                    - org_name: QA
+                      org_alias: qa
+                      source_branch: qa
+                      backup_branch: backup/qa
+                    - org_name: UAT
+                      org_alias: uat
+                      source_branch: uat
+                      backup_branch: backup/uat
+                    - org_name: PROD
+                      org_alias: prod
+                      source_branch: main
+                      backup_branch: backup/prod
+        steps:
+            - name: Dispatch backup for ${{ matrix.org_name }} on ${{ matrix.source_branch }}
+              if: >-
+                  github.event_name == 'schedule' ||
+                  inputs.org == 'ALL' ||
+                  inputs.org == matrix.org_name
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  REPO: ${{ github.repository }}
+                  BRANCH: ${{ matrix.source_branch }}
+                  ORG_NAME: ${{ matrix.org_name }}
+                  ORG_ALIAS: ${{ matrix.org_alias }}
+                  BACKUP_BRANCH: ${{ matrix.backup_branch }}
+              run: |
+                  gh workflow run sf-backup.yml \
+                      --repo "$REPO" \
+                      --ref "$BRANCH" \
+                      -f org_name="$ORG_NAME" \
+                      -f org_alias="$ORG_ALIAS" \
+                      -f backup_branch="$BACKUP_BRANCH"

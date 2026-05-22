@@ -1,0 +1,217 @@
+# Back up a single Salesforce sandbox.
+# Dispatched by backup-sandboxes.yml on the org's source branch so
+# environment secrets resolve correctly.
+#
+# Restores source tracking from cache, retrieves changed metadata,
+# queries audit metadata from the Tooling API, exports TPM template
+# data, and commits everything to the org's backup/* branch.
+#
+# Respects environment variable:
+#   SKIP_BACKUP — skip backup for this org
+
+name: Sandbox Backup
+
+on:
+    workflow_dispatch:
+        inputs:
+            org_name:
+                required: true
+                type: choice
+                options:
+                    - DEV
+                    - INT
+                    - QA
+                    - UAT
+                    - PROD
+                description: Display name (e.g., DEV, QA)
+            org_alias:
+                required: true
+                type: choice
+                options:
+                    - dev
+                    - int
+                    - qa
+                    - uat
+                    - prod
+                description: Salesforce CLI alias (e.g., dev, qa)
+            backup_branch:
+                required: true
+                type: string
+                description: Backup branch to commit to (e.g., backup/dev)
+
+permissions:
+    contents: write
+
+jobs:
+    backup:
+        name: Backup ${{ inputs.org_name }}
+        runs-on: ubuntu-latest
+        environment: ${{ inputs.org_alias == 'dev' && 'dev' || inputs.org_alias == 'int' && 'int' || inputs.org_alias == 'qa' && 'qa' || inputs.org_alias == 'uat' && 'uat' || 'prod' }}
+        if: vars.SKIP_BACKUP != 'true'
+        env:
+            ORG_ALIAS: ${{ inputs.org_alias }}
+        steps:
+            - name: Checkout (full history)
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  submodules: recursive
+
+            - name: Switch to backup branch
+              env:
+                  BACKUP_BRANCH: ${{ inputs.backup_branch }}
+                  SOURCE_BRANCH: ${{ github.ref_name }}
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+                  git fetch origin "$BACKUP_BRANCH" 2>/dev/null || true
+
+                  if git show-ref --verify --quiet "refs/remotes/origin/$BACKUP_BRANCH"; then
+                      git checkout "$BACKUP_BRANCH"
+                      echo "Merging $SOURCE_BRANCH into $BACKUP_BRANCH..."
+                      git merge --no-edit "origin/$SOURCE_BRANCH" --strategy-option theirs || true
+                  else
+                      echo "Backup branch does not exist. Creating from $SOURCE_BRANCH..."
+                      git checkout -b "$BACKUP_BRANCH" "origin/$SOURCE_BRANCH"
+                  fi
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '23'
+
+            - name: Install Salesforce CLI
+              run: |
+                  npm install --global @salesforce/cli
+                  echo "$(npm prefix -g)/bin" >> "$GITHUB_PATH"
+
+            - name: Authenticate
+              env:
+                  SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+              run: |
+                  printf '%s' "$SFDX_AUTH_URL" > /tmp/sfdx-auth-url.txt
+                  sf org login sfdx-url \
+                      --sfdx-url-file /tmp/sfdx-auth-url.txt \
+                      --alias "$ORG_ALIAS" \
+                      --set-default
+                  rm -f /tmp/sfdx-auth-url.txt
+
+            # ── Source Tracking ────────────────────────────────────────────
+            # Source tracking state (.sf/orgs/) persists between runs via
+            # GitHub Actions cache. On first run (cache miss), we reset
+            # tracking to establish a baseline — no retrieve happens.
+            # Subsequent runs detect only what changed since the last run.
+
+            - name: Restore source tracking
+              id: tracking
+              uses: actions/cache/restore@v4
+              with:
+                  path: .sf/orgs/
+                  key: source-tracking-${{ inputs.org_alias }}-${{ github.run_id }}-${{ github.run_attempt }}
+                  restore-keys: source-tracking-${{ inputs.org_alias }}-
+
+            - name: Initialize tracking (first run)
+              if: steps.tracking.outputs.cache-hit != 'true'
+              run: |
+                  echo "No previous tracking state found. Initializing baseline..."
+                  sf project reset tracking --target-org "$ORG_ALIAS" --no-prompt
+
+            # ── Detect & Retrieve ──────────────────────────────────────────
+
+            - name: Detect changes
+              id: changes
+              run: |
+                  sf project retrieve preview --target-org "$ORG_ALIAS" --json \
+                      > /tmp/retrieve-preview.json 2>&1 || true
+
+                  CHANGE_COUNT=$(node -e "
+                      try {
+                          const p = require('/tmp/retrieve-preview.json');
+                          const f = p.result?.fileResponses || [];
+                          process.stdout.write(String(f.length));
+                      } catch { process.stdout.write('0'); }
+                  ")
+
+                  echo "change_count=$CHANGE_COUNT" >> "$GITHUB_OUTPUT"
+
+                  if [ "$CHANGE_COUNT" -gt 0 ]; then
+                      echo "has_changes=true" >> "$GITHUB_OUTPUT"
+                      echo "Detected $CHANGE_COUNT changed component(s)."
+                  else
+                      echo "has_changes=false" >> "$GITHUB_OUTPUT"
+                      echo "No metadata changes detected."
+                  fi
+
+            - name: Audit changes
+              if: steps.changes.outputs.has_changes == 'true'
+              env:
+                  ORG_NAME: ${{ inputs.org_name }}
+              run: node scripts/node/backup-audit.js "$ORG_ALIAS" "$ORG_NAME" /tmp/retrieve-preview.json
+
+            - name: Retrieve metadata
+              if: steps.changes.outputs.has_changes == 'true'
+              run: |
+                  sf project retrieve start \
+                      --target-org "$ORG_ALIAS" \
+                      --ignore-conflicts \
+                      --wait 30
+
+            # ── Export TPM Data ────────────────────────────────────────────
+            # Always export data regardless of metadata changes — template
+            # data records can be modified without touching metadata.
+
+            - name: Install SFDMU
+              run: echo y | sf plugins install sfdmu --silent
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Export TPM data
+              env:
+                  SALES_ORGS: ${{ vars.SALES_ORGS }}
+              run: |
+                  SALES_ORGS="$(echo "$SALES_ORGS" | xargs)"
+                  EXPORT_ARGS=(export -s "$ORG_ALIAS" --verbose)
+                  if [ -n "$SALES_ORGS" ]; then
+                      EXPORT_ARGS+=(--source-orgs "$SALES_ORGS")
+                  fi
+                  npm run data -- "${EXPORT_ARGS[@]}"
+
+            # ── Persist & Commit ───────────────────────────────────────────
+
+            - name: Save source tracking
+              if: always()
+              uses: actions/cache/save@v4
+              with:
+                  path: .sf/orgs/
+                  key: source-tracking-${{ inputs.org_alias }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+            - name: Commit and push
+              env:
+                  BACKUP_BRANCH: ${{ inputs.backup_branch }}
+                  ORG_NAME: ${{ inputs.org_name }}
+              run: |
+                  git add --all
+
+                  if git diff --cached --quiet; then
+                      echo "No changes to commit."
+                      exit 0
+                  fi
+
+                  CHANGES=$(git diff --cached --stat | tail -1)
+                  git commit -m "[$ORG_NAME] $(date -u +%Y-%m-%d) sandbox backup
+
+                  $CHANGES"
+                  git push origin "$BACKUP_BRANCH"
+
+    notify:
+        needs: backup
+        if: failure()
+        uses: ./.github/workflows/slack-notify.yml
+        with:
+            workflow_name: Sandbox Backup (${{ inputs.org_name }})
+            result: failure
+        secrets:
+            SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+            SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}

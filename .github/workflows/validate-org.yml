@@ -1,0 +1,118 @@
+# Validates the codebase against a single Salesforce org.
+# Runs LWC Jest tests and a full dry-run deployment with RunLocalTests.
+# Dispatched by full-validation.yml on the target branch, or triggered manually.
+#
+# Respects environment variables:
+#   SKIP_VALIDATION — skip the Salesforce dry-run deploy (LWC tests still run)
+#   SKIP_NOTIFY     — skip Slack failure notification
+
+name: Validate Org
+
+on:
+    workflow_dispatch:
+        inputs:
+            org:
+                description: 'Salesforce org to validate'
+                required: true
+                type: choice
+                options:
+                    - DEV
+                    - INT
+                    - QA
+                    - UAT
+                    - PROD
+
+permissions:
+    contents: read
+    actions: read
+    pull-requests: read
+
+jobs:
+    validate:
+        name: Validate ${{ inputs.org }}
+        runs-on: ubuntu-latest
+        environment: ${{ inputs.org == 'DEV' && 'dev' || inputs.org == 'INT' && 'int' || inputs.org == 'QA' && 'qa' || inputs.org == 'UAT' && 'uat' || 'prod' }}
+        env:
+            ORG_ALIAS: ${{ inputs.org == 'DEV' && 'dev' || inputs.org == 'INT' && 'int' || inputs.org == 'QA' && 'qa' || inputs.org == 'UAT' && 'uat' || 'prod' }}
+        outputs:
+            skip_notify: ${{ steps.flags.outputs.skip_notify }}
+        steps:
+            - name: Check flags
+              id: flags
+              env:
+                  SKIP_VALIDATION: ${{ vars.SKIP_VALIDATION }}
+                  SKIP_NOTIFY: ${{ vars.SKIP_NOTIFY }}
+              run: |
+                  echo "skip=${SKIP_VALIDATION:-false}" >> "$GITHUB_OUTPUT"
+                  echo "skip_notify=${SKIP_NOTIFY:-false}" >> "$GITHUB_OUTPUT"
+                  if [ "$SKIP_VALIDATION" = "true" ]; then
+                      echo "::notice::Salesforce validation skipped (SKIP_VALIDATION=true)"
+                  fi
+
+            - name: Checkout
+              if: steps.flags.outputs.skip != 'true'
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              if: steps.flags.outputs.skip != 'true'
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '23'
+                  cache: 'npm'
+
+            - name: Install dependencies
+              if: steps.flags.outputs.skip != 'true'
+              run: npm ci
+
+            - name: Run LWC tests
+              if: steps.flags.outputs.skip != 'true'
+              run: npm run test:lwc
+
+            - name: Install Salesforce CLI
+              if: steps.flags.outputs.skip != 'true'
+              run: npm install --global @salesforce/cli
+
+            - name: Authenticate to ${{ inputs.org }}
+              if: steps.flags.outputs.skip != 'true'
+              env:
+                  SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+              run: |
+                  if [ -z "$SFDX_AUTH_URL" ]; then
+                      echo "::error::SFDX_AUTH_URL is not set for the $ORG_ALIAS environment"
+                      exit 1
+                  fi
+                  printf '%s' "$SFDX_AUTH_URL" > /tmp/sfdx-auth-url.txt
+                  sf org login sfdx-url \
+                      --sfdx-url-file /tmp/sfdx-auth-url.txt \
+                      --alias "$ORG_ALIAS" \
+                      --set-default
+                  rm -f /tmp/sfdx-auth-url.txt
+
+            - name: Full validation dry-run
+              if: steps.flags.outputs.skip != 'true'
+              env:
+                  WAIT: ${{ vars.SF_WAIT_TIMEOUT || '30' }}
+              run: |
+                  sf project deploy start \
+                      --target-org "$ORG_ALIAS" \
+                      --test-level RunLocalTests \
+                      --dry-run \
+                      --wait "$WAIT"
+                  sf apex test run \
+                      --target-org "$ORG_ALIAS" \
+                      --test-level RunLocalTests \
+                      --code-coverage \
+                      --result-format=human \
+                      --concise \
+                      --wait "$WAIT"
+
+    notify:
+        needs: validate
+        if: failure() && needs.validate.outputs.skip_notify != 'true'
+        uses: ./.github/workflows/slack-notify.yml
+        with:
+            workflow_name: Validate Org (${{ inputs.org }})
+            result: failure
+        secrets:
+            SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+            SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}

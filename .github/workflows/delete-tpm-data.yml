@@ -1,0 +1,64 @@
+# Delete TPM template data from a Salesforce org.
+# Runs scripts/apex/delete-tpm-data.apex via Anonymous Apex.
+# Protected by admin-guard to restrict to repo admins.
+
+name: Delete TPM Data
+
+on:
+    workflow_dispatch:
+        inputs:
+            org:
+                description: 'Salesforce org to delete data from'
+                required: true
+                type: choice
+                options:
+                    - DEV
+                    - INT
+                    - QA
+                    - UAT
+                    - PROD
+
+permissions:
+    contents: read
+    actions: read
+
+jobs:
+    admin-guard:
+        uses: ./.github/workflows/admin-guard.yml
+
+    delete-data:
+        name: Delete data from ${{ inputs.org }}
+        needs: admin-guard
+        runs-on: ubuntu-latest
+        environment: ${{ inputs.org == 'DEV' && 'dev' || inputs.org == 'INT' && 'int' || inputs.org == 'QA' && 'qa' || inputs.org == 'UAT' && 'uat' || 'prod' }}
+        env:
+            ORG_ALIAS: ${{ inputs.org == 'DEV' && 'dev' || inputs.org == 'INT' && 'int' || inputs.org == 'QA' && 'qa' || inputs.org == 'UAT' && 'uat' || 'prod' }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  sparse-checkout: |
+                      scripts/apex/delete-tpm-data.apex
+                      config/repo-admins.json
+                  sparse-checkout-cone-mode: false
+
+            - name: Install Salesforce CLI
+              run: npm install --global @salesforce/cli
+
+            - name: Authenticate to ${{ inputs.org }}
+              env:
+                  SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+              run: |
+                  if [ -z "$SFDX_AUTH_URL" ]; then
+                      echo "::error::SFDX_AUTH_URL is not set for the $ORG_ALIAS environment"
+                      exit 1
+                  fi
+                  printf '%s' "$SFDX_AUTH_URL" > /tmp/sfdx-auth-url.txt
+                  sf org login sfdx-url \
+                      --sfdx-url-file /tmp/sfdx-auth-url.txt \
+                      --alias "$ORG_ALIAS" \
+                      --set-default
+                  rm -f /tmp/sfdx-auth-url.txt
+
+            - name: Delete TPM data
+              run: sf apex run --file scripts/apex/delete-tpm-data.apex --target-org "$ORG_ALIAS"

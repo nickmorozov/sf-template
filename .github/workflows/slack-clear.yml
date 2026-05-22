@@ -1,0 +1,159 @@
+# Clear all bot messages from the Slack channel and recreate the Pipeline thread.
+# Manual trigger only, admin-guarded. Useful for cleaning up after testing or
+# when the channel gets too noisy.
+#
+# Deletes all messages posted by the bot (including thread replies), then posts
+# a fresh Pipeline thread and pins it.
+
+name: Clear Slack Channel
+
+on:
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    actions: read
+
+jobs:
+    admin-guard:
+        uses: ./.github/workflows/admin-guard.yml
+
+    clear:
+        name: Clear Bot Messages
+        needs: admin-guard
+        runs-on: ubuntu-latest
+        env:
+            SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+            SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+        steps:
+            - name: Get bot user ID
+              id: bot
+              run: |
+                  AUTH=$(curl -sf \
+                      -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                      "https://slack.com/api/auth.test")
+
+                  if [ "$(echo "$AUTH" | jq -r '.ok')" != "true" ]; then
+                      echo "::error::Failed to authenticate bot: $(echo "$AUTH" | jq -r '.error // "unknown"')"
+                      exit 1
+                  fi
+
+                  BOT_USER_ID=$(echo "$AUTH" | jq -r '.user_id')
+                  echo "bot_user_id=$BOT_USER_ID" >> "$GITHUB_OUTPUT"
+                  echo "Bot user ID: $BOT_USER_ID"
+
+            - name: Delete all bot messages
+              env:
+                  BOT_USER_ID: ${{ steps.bot.outputs.bot_user_id }}
+              run: |
+                  DELETED=0
+                  CURSOR=""
+
+                  while true; do
+                      # Fetch channel history (paginated)
+                      if [ -n "$CURSOR" ]; then
+                          HISTORY=$(curl -sf \
+                              -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                              "https://slack.com/api/conversations.history?channel=$SLACK_CHANNEL_ID&limit=100&cursor=$CURSOR")
+                      else
+                          HISTORY=$(curl -sf \
+                              -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                              "https://slack.com/api/conversations.history?channel=$SLACK_CHANNEL_ID&limit=100")
+                      fi
+
+                      if [ "$(echo "$HISTORY" | jq -r '.ok')" != "true" ]; then
+                          echo "::error::Failed to fetch history: $(echo "$HISTORY" | jq -r '.error // "unknown"')"
+                          exit 1
+                      fi
+
+                      # Get all bot message timestamps
+                      BOT_MESSAGES=$(echo "$HISTORY" | jq -r \
+                          --arg bot "$BOT_USER_ID" \
+                          '[.messages[] | select(.user == $bot) | .ts] | .[]')
+
+                      for MSG_TS in $BOT_MESSAGES; do
+                          # Delete thread replies first
+                          REPLIES=$(curl -sf \
+                              -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                              "https://slack.com/api/conversations.replies?channel=$SLACK_CHANNEL_ID&ts=$MSG_TS&limit=200")
+
+                          if [ "$(echo "$REPLIES" | jq -r '.ok')" = "true" ]; then
+                              # Delete replies (skip the parent — it's the first message)
+                              REPLY_TIMESTAMPS=$(echo "$REPLIES" | jq -r \
+                                  --arg parent "$MSG_TS" \
+                                  '[.messages[] | select(.ts != $parent) | .ts] | reverse | .[]')
+
+                              for REPLY_TS in $REPLY_TIMESTAMPS; do
+                                  curl -sf -X POST \
+                                      -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                                      -H "Content-Type: application/json" \
+                                      -d "$(jq -n \
+                                          --arg channel "$SLACK_CHANNEL_ID" \
+                                          --arg ts "$REPLY_TS" \
+                                          '{channel: $channel, ts: $ts}')" \
+                                      "https://slack.com/api/chat.delete" > /dev/null
+                                  DELETED=$((DELETED + 1))
+                                  sleep 1.2
+                              done
+                          fi
+
+                          # Delete the parent message
+                          curl -sf -X POST \
+                              -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                              -H "Content-Type: application/json" \
+                              -d "$(jq -n \
+                                  --arg channel "$SLACK_CHANNEL_ID" \
+                                  --arg ts "$MSG_TS" \
+                                  '{channel: $channel, ts: $ts}')" \
+                              "https://slack.com/api/chat.delete" > /dev/null
+                          DELETED=$((DELETED + 1))
+                          sleep 1.2
+                      done
+
+                      # Check for next page
+                      CURSOR=$(echo "$HISTORY" | jq -r '.response_metadata.next_cursor // empty')
+                      if [ -z "$CURSOR" ]; then
+                          break
+                      fi
+                  done
+
+                  echo "Deleted $DELETED bot messages (including thread replies)"
+
+            - name: Recreate Pipeline thread
+              env:
+                  REPO: ${{ github.repository }}
+              run: |
+                  MARKER="__PIPELINE_THREAD__"
+
+                  POST=$(curl -sf -X POST \
+                      -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                      -H "Content-Type: application/json" \
+                      -d "$(jq -n \
+                          --arg channel "$SLACK_CHANNEL_ID" \
+                          --arg text ":package: *Pipeline Notifications* — ${REPO}\n${MARKER}" \
+                          '{channel: $channel, text: $text}')" \
+                      "https://slack.com/api/chat.postMessage")
+
+                  if [ "$(echo "$POST" | jq -r '.ok')" != "true" ]; then
+                      echo "::error::Failed to create Pipeline thread: $(echo "$POST" | jq -r '.error // "unknown"')"
+                      exit 1
+                  fi
+
+                  THREAD_TS=$(echo "$POST" | jq -r '.ts')
+                  echo "Created new Pipeline thread: $THREAD_TS"
+
+                  # Pin the new message
+                  PIN_RESULT=$(curl -sf -X POST \
+                      -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                      -H "Content-Type: application/json" \
+                      -d "$(jq -n \
+                          --arg channel "$SLACK_CHANNEL_ID" \
+                          --arg timestamp "$THREAD_TS" \
+                          '{channel: $channel, timestamp: $timestamp}')" \
+                      "https://slack.com/api/pins.add")
+
+                  if [ "$(echo "$PIN_RESULT" | jq -r '.ok')" != "true" ]; then
+                      echo "::warning::Failed to pin Pipeline thread: $(echo "$PIN_RESULT" | jq -r '.error // "unknown"')"
+                  else
+                      echo "Pipeline thread pinned successfully"
+                  fi
