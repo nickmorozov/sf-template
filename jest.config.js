@@ -3,7 +3,7 @@ const { jestConfig } = require('@salesforce/sfdx-lwc-jest/config');
 module.exports = {
     ...jestConfig,
     modulePathIgnorePatterns: ['<rootDir>/.localdevserver'],
-    testEnvironment: 'node',
+    testEnvironment: 'jsdom',
     testMatch: ['**/lwc/*/__tests__/*.test.js'],
     collectCoverage: true,
     coverageDirectory: 'coverage',
