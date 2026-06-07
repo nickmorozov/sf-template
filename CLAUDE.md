@@ -83,7 +83,7 @@ The sync script is the core mechanism. It resolves paths relative to `__dirname`
 
 The `.husky/pre-commit` hook runs three steps on every commit:
 
-1. **Branch guard** — blocks direct commits to `main`, `dev`, `qa`, `uat`. Bypass with `--no-verify` or `ADMIN_OVERRIDE=1`.
+1. **Branch guard** — blocks direct commits to `main`, `dev`, `qa`, `uat`, `sit`. Bypass with `--no-verify` or `ADMIN_OVERRIDE=1`.
 2. **Profile cleanup** — uses Perl regex to strip all `<userPermissions>` blocks from staged `*.profile-meta.xml` files EXCEPT: `AuthorApex`, `InstallPackaging`, `InboundMigrationToolsUser`, `ManageAuthProviders`, `ModifyAllData`, `ModifyMetadata`. Modified files are re-staged automatically.
 3. **lint-staged** — runs four tools by file pattern:
     - `prettier --write` on all formattable files (cls, cmp, css, html, js, json, md, xml, etc.)

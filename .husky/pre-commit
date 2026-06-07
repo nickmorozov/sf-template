@@ -2,7 +2,7 @@
 # Prevent non-admin commits directly to protected branches.
 # Admins: use "git commit --no-verify" or set ADMIN_OVERRIDE=1 to bypass.
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-PROTECTED_BRANCHES="main dev qa uat"
+PROTECTED_BRANCHES="main dev qa uat sit"
 
 for protected in $PROTECTED_BRANCHES; do
     if [ "$BRANCH" = "$protected" ]; then
