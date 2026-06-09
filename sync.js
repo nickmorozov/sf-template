@@ -28,7 +28,7 @@ const COPY_FILES = ['.prettierrc.yml', '.editorconfig', '.npmrc', '.prettierigno
 // Whole directories synced recursively (additive: consumer extras are preserved).
 const COPY_DIRS = ['scripts', 'jest-mocks', '.trunk'];
 
-const COPY_HOOKS = ['.husky/pre-commit'];
+const COPY_HOOKS = ['.husky/pre-commit', '.husky/post-merge', '.husky/pre-merge-commit'];
 
 // ── Claude Code files managed by the template ────────────────────────
 // These are copied verbatim. Consumer can add their own files alongside.
