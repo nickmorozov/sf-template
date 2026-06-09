@@ -36,4 +36,4 @@ After tests run:
 4. If any tests failed, explain the failures in plain language
 5. If coverage is low, identify which lines are not covered and suggest test scenarios
 
-Note: lint-staged runs `sfdx-lwc-jest -- --bail --findRelatedTests` on changed test files and `sf scanner run` on Apex files automatically on every commit.
+Note: lint-staged runs `sfdx-lwc-jest -- --bail --findRelatedTests` on changed test files and `sf code-analyzer run` on Apex files automatically on every commit.

@@ -112,7 +112,7 @@ public class MyInvocable {
 
 ## Pre-commit Pipeline Integration
 
-- `sf scanner run` checks Apex on every commit via lint-staged (catches common violations automatically).
+- `sf code-analyzer run` checks Apex on every commit via lint-staged (catches common violations automatically).
 - The pre-commit hook strips non-essential `<userPermissions>` from staged profile XMLs (preserves only: AuthorApex, InstallPackaging, InboundMigrationToolsUser, ManageAuthProviders, ModifyAllData, ModifyMetadata).
 - Direct commits to `main`, `dev`, `qa`, `uat` are blocked by the branch guard. Use feature branches.
 

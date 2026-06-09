@@ -87,7 +87,7 @@ private class MyServiceTest {
 - Minimum: **75%** to deploy to production.
 - Target: **90%+** for quality code.
 - Run with coverage: `sf apex run test --class-names MyServiceTest --synchronous --result-format human --code-coverage`
-- `sf scanner run` checks Apex static analysis automatically on every commit.
+- `sf code-analyzer run` checks Apex static analysis automatically on every commit.
 
 ## LWC Jest Testing
 

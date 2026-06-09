@@ -12,7 +12,7 @@
     insert decision.getRecords();
     ```
 - Alternative: check `Schema.sObjectType.Account.fields.Name.isAccessible()` before field access.
-- `sf scanner run` enforces these rules on every commit via lint-staged.
+- `sf code-analyzer run` enforces these rules on every commit via lint-staged.
 
 ## SOQL Injection Prevention
 

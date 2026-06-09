@@ -40,4 +40,4 @@ After generating, remind me to:
 
 1. Deploy: `npm run source:push`
 2. Run tests: `sf apex run test --class-names ClassNameTest --synchronous --result-format human --code-coverage`
-3. Note: `sf scanner run` will check the code automatically on commit via lint-staged
+3. Note: `sf code-analyzer run` will check the code automatically on commit via lint-staged
