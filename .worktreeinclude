@@ -1,0 +1,7 @@
+.idea
+.illuminatedCloud
+node_modules
+.sf
+.sfdx
+.env
+.claude
