@@ -37,7 +37,21 @@
         "data:export:verbose": "npm run data:export -- --verbose",
         "data:import": "TARGET_ALIAS=\"${TARGET_ALIAS:-org-dev}\" npm run data -- import",
         "data:import:verbose": "npm run data:import -- --verbose",
-        "data:import:sim": "npm run data:import -- --simulation --verbose"
+        "data:import:sim": "npm run data:import -- --simulation --verbose",
+        "test:apex": "bash scripts/shell/run_test_suites.sh",
+        "test:apex:suite": "bash scripts/shell/run_test_suites.sh --suite",
+        "test:local": "bash scripts/shell/run_aer_suites.sh",
+        "test:local:suite": "bash scripts/shell/run_aer_suites.sh --suite",
+        "test:lwc": "sfdx-lwc-jest",
+        "source:compile": "node scripts/node/compile.js",
+        "promote": "bash scripts/shell/promote.sh",
+        "promote:dev": "bash scripts/shell/promote.sh dev",
+        "promote:qa": "bash scripts/shell/promote.sh qa",
+        "promote:uat": "bash scripts/shell/promote.sh uat",
+        "promote:main": "bash scripts/shell/promote.sh main",
+        "package:bump:patch": "bash scripts/shell/bump_patch.sh",
+        "package:bump:minor": "bash scripts/shell/bump_minor.sh",
+        "package:bump:major": "bash scripts/shell/bump_major.sh"
     },
     "lint-staged": {
         "**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}": [
@@ -50,7 +64,7 @@
             "sfdx-lwc-jest -- --bail --findRelatedTests --passWithNoTests"
         ],
         "**/*.{cls,trigger,page,component}": [
-            "sf scanner run"
+            "sf code-analyzer run --workspace"
         ]
     },
     "devDependencies": {
@@ -66,9 +80,9 @@
         "@salesforce/eslint-plugin-aura": "^3.0.0",
         "@salesforce/eslint-plugin-lightning": "^2.0.0",
         "@salesforce/sfdx-lwc-jest": "^7.1.2",
-        "@salesforce/sfdx-scanner": "^4.12.0",
         "@types/jest": "^30.0.0",
         "@types/node": "^25.0.0",
+        "commander": "^12.1.0",
         "eslint": "^9.39.0",
         "eslint-plugin-import": "^2.32.0",
         "eslint-plugin-jest": "^29.15.0",
