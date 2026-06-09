@@ -1,0 +1,22 @@
+{
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "prompt": "Block clearly destructive Salesforce/git commands. If the command contains `sf org delete`, `rm -rf force-app`, `rm -rf src`, or `git push --force`/`git push -f`, refuse and explain the safer alternative. Otherwise allow."
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write|MultiEdit",
+                "prompt": "If the edited file is Apex (.cls/.trigger), scan for SOQL or DML inside for/while loops and flag governor-limit risk. If it is an LWC template (.html), flag deprecated `if:true`/`if:false` and suggest `lwc:if`/`lwc:else`. Report only real findings; say nothing if clean."
+            }
+        ],
+        "Stop": [
+            {
+                "matcher": "",
+                "prompt": "If Apex classes were added or changed this session without a matching *Test.cls, remind the user. If there are undeployed changes, remind them to run `npm run source:push`. Keep it to one line; skip if nothing applies."
+            }
+        ]
+    }
+}
