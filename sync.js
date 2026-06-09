@@ -23,7 +23,10 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE = process.argv.includes('--force');
 
 // ── Files to copy verbatim ──────────────────────────────────────────
-const COPY_FILES = ['.prettierrc.yml', '.editorconfig', '.npmrc', '.prettierignore', '.stylelintrc.json', 'eslint.config.mjs', 'jest.config.js', '.mcp.json'];
+const COPY_FILES = ['.prettierrc.yml', '.editorconfig', '.npmrc', '.prettierignore', '.stylelintrc.json', 'eslint.config.mjs', 'jest.config.js', '.mcp.json', '.worktreeinclude'];
+
+// Whole directories synced recursively (additive: consumer extras are preserved).
+const COPY_DIRS = ['scripts', 'jest-mocks', '.trunk'];
 
 const COPY_HOOKS = ['.husky/pre-commit'];
 
@@ -87,6 +90,20 @@ const TEMPLATE_MANAGED_SCRIPTS = [
     'data:import',
     'data:import:verbose',
     'data:import:sim',
+    'test:apex',
+    'test:apex:suite',
+    'test:local',
+    'test:local:suite',
+    'test:lwc',
+    'source:compile',
+    'promote',
+    'promote:dev',
+    'promote:qa',
+    'promote:uat',
+    'promote:main',
+    'package:bump:patch',
+    'package:bump:minor',
+    'package:bump:major',
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -149,6 +166,40 @@ function syncCopyFiles() {
                 fs.chmodSync(dest, 0o755);
             }
         }
+    }
+}
+
+// ── Copy whole directories (recursive, binary-safe, additive) ───────
+
+function copyDirRecursive(srcDir, destDir, relBase) {
+    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+        const srcPath = path.join(srcDir, entry.name);
+        const destPath = path.join(destDir, entry.name);
+        const rel = path.join(relBase, entry.name);
+
+        if (entry.isDirectory()) {
+            copyDirRecursive(srcPath, destPath, rel);
+            continue;
+        }
+
+        const srcContent = fs.readFileSync(srcPath);
+        const destExists = fs.existsSync(destPath);
+        if (destExists && fs.readFileSync(destPath).equals(srcContent)) continue;
+
+        reportCopy(rel, !destExists);
+        if (!DRY_RUN) {
+            if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+            fs.writeFileSync(destPath, srcContent);
+            if (entry.name.endsWith('.sh')) fs.chmodSync(destPath, 0o755);
+        }
+    }
+}
+
+function syncCopyDirs() {
+    for (const relDir of COPY_DIRS) {
+        const srcDir = path.join(TEMPLATE_DIR, relDir);
+        if (!fs.existsSync(srcDir)) continue;
+        copyDirRecursive(srcDir, path.join(PROJECT_DIR, relDir), relDir);
     }
 }
 
@@ -382,6 +433,7 @@ async function main() {
     console.log(`\nSyncing ${templateName}/ → ${projectName}/\n`);
 
     syncCopyFiles();
+    syncCopyDirs();
     syncClaudeSettings();
     syncDataManager();
     syncPackageJson();
