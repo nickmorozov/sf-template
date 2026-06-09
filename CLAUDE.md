@@ -63,6 +63,20 @@ npm install                             # Install all devDependencies
 | `.vscode/extensions.json` | Recommended VS Code extensions (SF DX, ESLint, Prettier, Stylelint, Apex PMD)          |
 | `.vscode/launch.json`     | Apex Replay Debugger launch configuration                                              |
 
+### Synced Directories
+
+`sync.js` also copies these directories into the consumer (additive — your project-specific files are preserved):
+
+| Directory     | Contents                                                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scripts/`    | `node/` (config reader, semver bumper, compile, auth), `shell/` (suite runners, promote, full_test, bump wrappers), `aer/` (install + vendor), `apex/` (generic helpers) |
+| `jest-mocks/` | `lightning/modal.js` (wired via `jest.config.js` `moduleNameMapper`)                                                                                                     |
+| `.trunk/`     | meta-linter suite (security/IaC/secret scanning)                                                                                                                         |
+
+### Org-Neutrality Contract (`config/project.config.json`)
+
+All org/project-specific values live in one file so the template stays org-neutral and forks cleanly. Keys: `githubOrg`, `projectName`, `aliasPrefix`, `pipeline` (branch array — drives the branch guard and `promote.sh`), `packageName`, `namespace`, `devHub`, `slackChannel`, `aerNamespace`, `aerSkip`. Read by bash via `node scripts/node/config.js <key>`.
+
 ### Sync Script (`sync.js`)
 
 The sync script is the core mechanism. It resolves paths relative to `__dirname`, so it only works when this repo lives as a submodule at `<project>/.template/`.
@@ -170,7 +184,6 @@ npm run sync:update
 - `.gitignore` — only patched (`.husky/` → `.husky/_/`), never overwritten
 - `.env` — org aliases, credentials
 - `config/*.yaml` — project-specific YAML config for sf-data-manager (template includes examples in `config/`)
-- `post-merge` / `restore-org-config.sh` hooks (multi-org branch config)
-- CI/CD workflows (`.github/workflows/`)
+- CI/CD workflows (`.github/workflows/`) — these live in the scaffold repos (sf-project-template / sf-package-template), not here; GitHub Actions cannot run from a submodule.
 - `CLAUDE.md` for the consumer project
 - The `test` script (top-level) — some projects run Apex tests, some don't
