@@ -7,7 +7,7 @@ module.exports = {
         '^lightning/modal$': '<rootDir>/jest-mocks/lightning/modal',
     },
     modulePathIgnorePatterns: ['<rootDir>/.localdevserver'],
-    testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.worktrees/', '<rootDir>/.claude/'],
+    testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.worktrees/', '<rootDir>/.claude/', '<rootDir>/scripts/'],
     testEnvironment: 'node',
     testMatch: ['**/lwc/*/__tests__/*.test.js'],
     collectCoverage: true,
