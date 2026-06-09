@@ -66,7 +66,7 @@ nickmorozov/sf-package-template  (UPSTREAM — ISV/2GP scaffold, NEW)
 
 9 repos total (3 upstream + 6 forks). Forks sync from upstream via `gh repo sync` until behavior (not just config values) diverges.
 
-> **Open item:** the Enum GitHub org slug. Session memory referenced `enum-solutions-inc`; current `gh` membership shows `enum-labs`. Confirm before forking.
+> **Enum org slug:** `enum-labs` (confirmed). The org `enum-solutions-inc` was renamed to `enum-labs`; the company name did not change. All forks target `enum-labs`.
 
 ### Layer responsibilities (the synced/scaffold split)
 
