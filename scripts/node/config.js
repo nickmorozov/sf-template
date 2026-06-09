@@ -42,6 +42,9 @@ if (require.main === module) {
     const cfg = readConfig();
     if (!key) {
         process.stdout.write(JSON.stringify(cfg, null, 2) + '\n');
+    } else if (!Object.prototype.hasOwnProperty.call(cfg, key)) {
+        process.stderr.write(`Unknown config key: ${key}\n`);
+        process.exit(1);
     } else {
         process.stdout.write(formatValue(cfg[key]) + '\n');
     }

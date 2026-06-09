@@ -3,6 +3,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { readConfig, formatValue, DEFAULTS } = require('./config');
 
 function tmp() {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'cfg-'));
@@ -18,7 +19,6 @@ describe('config', () => {
 
     it('returns defaults when no config file exists', () => {
         fs.rmSync(path.join(dir, 'config'), { recursive: true, force: true });
-        const { readConfig, DEFAULTS } = require('./config');
         const cfg = readConfig(dir);
         assert.deepStrictEqual(cfg.pipeline, DEFAULTS.pipeline);
         assert.strictEqual(cfg.namespace, '');
@@ -26,7 +26,6 @@ describe('config', () => {
 
     it('file values override defaults, unspecified keys keep defaults', () => {
         fs.writeFileSync(path.join(dir, 'config', 'project.config.json'), JSON.stringify({ namespace: 'enumsync', pipeline: ['dev', 'main'] }));
-        const { readConfig } = require('./config');
         const cfg = readConfig(dir);
         assert.strictEqual(cfg.namespace, 'enumsync');
         assert.deepStrictEqual(cfg.pipeline, ['dev', 'main']);
@@ -34,7 +33,6 @@ describe('config', () => {
     });
 
     it('formatValue joins arrays with spaces', () => {
-        const { formatValue } = require('./config');
         assert.strictEqual(formatValue(['dev', 'qa', 'main']), 'dev qa main');
         assert.strictEqual(formatValue('x'), 'x');
         assert.strictEqual(formatValue(undefined), '');
