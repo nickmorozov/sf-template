@@ -22,7 +22,7 @@ if command -v node >/dev/null 2>&1; then
     AER_NAMESPACE="$(node "$SCRIPT_DIR/../node/config.js" aerNamespace 2>/dev/null || true)"
     while IFS= read -r _t; do
         [ -n "$_t" ] && SKIP_ARGS+=(--skip "$_t")
-    done < <(node "$SCRIPT_DIR/../node/config.js" aerSkip 2>/dev/null | tr ' ' '\n')
+    done < <(node "$SCRIPT_DIR/../node/config.js" aerSkip 2>/dev/null | tr ' ' '\n' || true)
 fi
 NS_ARGS=()
 [ -n "$AER_NAMESPACE" ] && NS_ARGS=(--default-namespace "$AER_NAMESPACE")
@@ -78,7 +78,7 @@ for SUITE in "${SUITES[@]}"; do
     fi
 
     echo "─── Suite: $SUITE ($SUITE_PATH) ───"
-    if aer test "${NS_ARGS[@]}" -p Admin -p User "${SKIP_ARGS[@]}" --filter-path "$SUITE_PATH" src; then
+    if aer test ${NS_ARGS[@]+"${NS_ARGS[@]}"} -p Admin -p User ${SKIP_ARGS[@]+"${SKIP_ARGS[@]}"} --filter-path "$SUITE_PATH" src; then
         PASSED_SUITES+=("$SUITE")
     else
         FAILED_SUITES+=("$SUITE")
