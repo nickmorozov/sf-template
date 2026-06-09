@@ -32,6 +32,14 @@ describe('config', () => {
         assert.strictEqual(cfg.projectName, 'PROJECT_NAME'); // default preserved
     });
 
+    it('defaults deployMode to source and allows override to package', () => {
+        const def = readConfig(dir);
+        assert.strictEqual(def.deployMode, 'source');
+        fs.writeFileSync(path.join(dir, 'config', 'project.config.json'), JSON.stringify({ deployMode: 'package' }));
+        const cfg = readConfig(dir);
+        assert.strictEqual(cfg.deployMode, 'package');
+    });
+
     it('formatValue joins arrays with spaces', () => {
         assert.strictEqual(formatValue(['dev', 'qa', 'main']), 'dev qa main');
         assert.strictEqual(formatValue('x'), 'x');

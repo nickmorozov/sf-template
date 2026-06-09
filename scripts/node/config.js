@@ -18,6 +18,7 @@ const DEFAULTS = {
     namespace: '',
     devHub: '',
     slackChannel: '',
+    deployMode: 'source',
     aerNamespace: '',
     aerSkip: [],
 };
