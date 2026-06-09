@@ -177,6 +177,8 @@ function copyDirRecursive(srcDir, destDir, relBase) {
         const destPath = path.join(destDir, entry.name);
         const rel = path.join(relBase, entry.name);
 
+        if (entry.isSymbolicLink()) continue; // skip runtime symlinks (e.g. .trunk cache dirs)
+
         if (entry.isDirectory()) {
             copyDirRecursive(srcPath, destPath, rel);
             continue;
