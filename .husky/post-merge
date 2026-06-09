@@ -1,0 +1,4 @@
+# Rewrite branch-specific org aliases after a fast-forward pull/merge.
+if [ -f scripts/restore-org-config.sh ]; then
+    sh scripts/restore-org-config.sh --no-stage || true
+fi

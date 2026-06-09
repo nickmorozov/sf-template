@@ -1,0 +1,4 @@
+# Stage branch-specific org-config into the merge commit.
+if [ -f scripts/restore-org-config.sh ]; then
+    sh scripts/restore-org-config.sh || true
+fi
