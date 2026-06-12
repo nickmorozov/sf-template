@@ -385,7 +385,7 @@ function syncDataManager() {
     const dmDir = path.join(PROJECT_DIR, DATA_MANAGER_WORKSPACE);
 
     // 1. Initialize nested submodule if not present
-    if (!fs.existsSync(path.join(dmDir, 'main.js'))) {
+    if (!fs.existsSync(path.join(dmDir, 'src', 'main.js'))) {
         console.log(`  + ${DATA_MANAGER_WORKSPACE}/ (init nested submodule)`);
         changes.push({ type: 'create', file: DATA_MANAGER_WORKSPACE });
 
