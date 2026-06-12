@@ -1,7 +1,7 @@
 // Copy missing Permission Sets + Permission Set Groups from one user to another
-// Replace these with your source/target identifiers
-String SOURCE = 'llima@corraogroup.com.bftpm3';
-String TARGET = 'jonathan_castelo@b-f.com.bftpm3';
+// EDIT BEFORE USE: set the source and target usernames below.
+String SOURCE = 'source.user@example.com';
+String TARGET = 'target.user@example.com';
 
 List<User> u = [
     SELECT Id, Username, Email

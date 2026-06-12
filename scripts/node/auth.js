@@ -58,6 +58,6 @@ function checkSalesforceCli() {
 program.parse();
 
 // Usage examples:
-// node scripts/auth.js cgtpm-dev-ed my-first-tpm-dev
+// node scripts/auth.js acme-dev-ed acme--dev
 // node scripts/auth.js client-domain--dev client-dev
 // node scripts/auth.js client-domain client-prod

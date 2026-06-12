@@ -7,30 +7,69 @@
 #   scripts/restore-org-config.sh           # modify + stage (for pre-commit)
 #   scripts/restore-org-config.sh --no-stage # modify only (for post-merge/pull)
 #
-# Branch → env mapping: dev, int, qa, uat → same; main → prod
-# Replaces: bumblebee-{env}, bumblebee_{env}, .bb.{env}
+# Branch → env mapping: each branch maps to itself; main → prod
+# Replaces: {prefix}-{env}, {prefix}_{env}, .{prefix-initials}.{env}
 
 STAGE=true
 [ "${1:-}" = "--no-stage" ] && STAGE=false
 
+# Derive alias prefix from project config; exit silently if unconfigured.
+PREFIX=$(node scripts/node/config.js aliasPrefix)
+if [ -z "$PREFIX" ]; then
+    exit 0
+fi
+
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-case "$BRANCH" in
-    dev|int|qa|uat) ENV="$BRANCH" ;;
-    main)           ENV="prod" ;;
-    *)              exit 0 ;;
-esac
+# Build env list from pipeline config (space-separated branch names).
+PIPELINE=$(node scripts/node/config.js pipeline)
+ENV=""
+for b in $PIPELINE; do
+    if [ "$b" = "$BRANCH" ]; then
+        # main branch maps to "prod" alias; all others use the branch name.
+        if [ "$b" = "main" ]; then
+            ENV="prod"
+        else
+            ENV="$b"
+        fi
+        break
+    fi
+done
 
-ENVS="dev|int|qa|uat|prod"
+# Branch not in pipeline — nothing to restore.
+if [ -z "$ENV" ]; then
+    exit 0
+fi
+
+# Build alternation pattern of all possible env values from pipeline.
+ENVS=""
+for b in $PIPELINE; do
+    if [ "$b" = "main" ]; then
+        e="prod"
+    else
+        e="$b"
+    fi
+    if [ -z "$ENVS" ]; then
+        ENVS="$e"
+    else
+        ENVS="${ENVS}|${e}"
+    fi
+done
+
 FILES=(
     .env
     .sf/config.json
     .sfdx/sfdx-config.json
     config/org-users.json
-    .idea/bumble-bee.iml
     .idea/illuminatedCloud.xml
     .idea/runConfigurations/*
 )
+
+# Include project iml file if it exists (named after the project).
+PROJECT_NAME=$(node scripts/node/config.js projectName)
+if [ -n "$PROJECT_NAME" ]; then
+    FILES+=(".idea/${PROJECT_NAME}.iml")
+fi
 
 CHANGED=false
 for f in "${FILES[@]}"; do
@@ -38,14 +77,14 @@ for f in "${FILES[@]}"; do
 
     before=$(cat "$f")
 
-    # bumblebee-{env}  →  bumblebee-{current}   (org alias)
-    perl -pi -e "s/bumblebee-(?:${ENVS})/bumblebee-${ENV}/g" "$f"
+    # {prefix}-{env}  →  {prefix}-{current}   (org alias)
+    perl -pi -e "s/${PREFIX}-(?:${ENVS})/${PREFIX}-${ENV}/g" "$f"
 
-    # bumblebee_{env}  →  bumblebee_{current}    (IC symbol table path)
-    perl -pi -e "s/bumblebee_(?:${ENVS})/bumblebee_${ENV}/g" "$f"
+    # {prefix}_{env}  →  {prefix}_{current}    (IC symbol table path)
+    perl -pi -e "s/${PREFIX}_(?:${ENVS})/${PREFIX}_${ENV}/g" "$f"
 
-    # .bb.{env}        →  .bb.{current}          (email domain suffix)
-    perl -pi -e "s/\.bb\.(?:${ENVS})/.bb.${ENV}/g" "$f"
+    # .{prefix}.{env}  →  .{prefix}.{current}  (email domain suffix)
+    perl -pi -e "s/\.${PREFIX}\.(?:${ENVS})/.${PREFIX}.${ENV}/g" "$f"
 
     after=$(cat "$f")
     if [ "$before" != "$after" ]; then
@@ -55,5 +94,5 @@ for f in "${FILES[@]}"; do
 done
 
 if [ "$CHANGED" = true ]; then
-    echo "✓ Restored org config for '$BRANCH' (bumblebee-${ENV})"
+    echo "✓ Restored org config for '$BRANCH' (${PREFIX}-${ENV})"
 fi

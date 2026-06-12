@@ -7,7 +7,7 @@ const os = require('os');
 const SAMPLE_PKG = { version: '1.18.5' };
 const SAMPLE_SFDX = {
     packageDirectories: [{ versionNumber: '1.18.5.NEXT', path: 'src' }],
-    namespace: 'cgpm',
+    namespace: 'acme',
 };
 
 function setup() {
@@ -59,7 +59,7 @@ describe('bump', () => {
         const { bump } = require('./bump');
         bump('patch', tmpDir);
         const sfdx = readJSON(tmpDir, 'sfdx-project.json');
-        assert.strictEqual(sfdx.namespace, 'cgpm');
+        assert.strictEqual(sfdx.namespace, 'acme');
         assert.strictEqual(sfdx.packageDirectories[0].path, 'src');
     });
 

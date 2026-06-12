@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 
-// Assigns CG_TPM_User and CG_TPM_Developer permission sets to all users
-// in config/org-users.json, then copies all other permission sets from the
-// first user (source) to the rest.
+// Assigns the configured permission sets to all users in config/org-users.json,
+// then copies all other permission sets from the first user (source) to the rest.
+//
+// Permission set names are read from:
+//   - npm_package_config_admin_set / npm_package_config_user_set env vars
+//     (set via package.json "config" block: { "admin_set": "MyAdmin", "user_set": "MyUser" })
+//   - CLI args: node scripts/node/assign-permsets.js [source-username] [admin-set] [user-set]
+//   - Defaults: 'Admin' / 'User'
 //
 // Usage: node scripts/node/assign-permsets.js [source-username]
 
@@ -20,13 +25,16 @@ if (users.length === 0) {
 }
 
 // 1. Assign named permission sets to all users
-const permsets = ['CG_TPM_User', 'CG_TPM_Developer'];
+// Names come from env vars (set via package.json config block), then CLI args, then defaults.
+const adminSet = process.env.npm_package_config_admin_set || process.argv[3] || 'Admin';
+const userSet = process.env.npm_package_config_user_set || process.argv[4] || 'User';
+const permsets = [adminSet, userSet];
 
 for (const permset of permsets) {
     console.log(`Assigning ${permset}...`);
     try {
         execFileSync('sf', ['org', 'assign', 'permset', '--name', permset, '--on-behalf-of', ...users], {
-            stdio: 'inherit'
+            stdio: 'inherit',
         });
     } catch (e) {
         console.error(`Failed to assign ${permset}: ${e.message}`);
