@@ -4,20 +4,17 @@
 
 package.xml
 
-{**,*}/*.md
+**/*.md
 
-{**,*}/manifest/*.xml
+**/manifest/*.xml
 
 # LWC configuration files
-{**,*}/jsconfig.json
-{**,*}/.eslintrc.json
+**/jsconfig.json
+**/.eslintrc.json
 
 # LWC Jest
-{**,*}/__tests__/**
-
-**/jsconfig.json
-
-**/.eslintrc.json
+**/__tests__/**
+**/*.test.js
 
 # Added by Illuminated Cloud
 /.illuminatedCloud/
