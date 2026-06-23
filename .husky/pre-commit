@@ -31,5 +31,5 @@ for f in $(git diff --cached --name-only --diff-filter=AM | grep -E 'profiles/.*
   git add "$f"
 done
 
-# ── Run lint-staged (prettier, eslint, sf scanner) ──
+# ── Run lint-staged (prettier, eslint, sf code-analyzer) ──
 npx lint-staged

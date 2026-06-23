@@ -59,6 +59,8 @@ const TEMPLATE_MANAGED_PKG_FIELDS = ['engines', 'lint-staged'];
 // Scripts managed by the template (project-specific scripts like open:* are preserved)
 const TEMPLATE_MANAGED_SCRIPTS = [
     'lint',
+    'lint:lwc',
+    'lint:apex',
     'lint:slds',
     'lint:slds:fix',
     'test:unit',

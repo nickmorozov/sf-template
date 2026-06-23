@@ -89,7 +89,7 @@ The `.husky/pre-commit` hook runs three steps on every commit:
     - `prettier --write` on all formattable files (cls, cmp, css, html, js, json, md, xml, etc.)
     - `eslint` on Aura and LWC JS files
     - `sfdx-lwc-jest --bail --findRelatedTests` on LWC test files
-    - `sf scanner run` on Apex files (cls, trigger, page, component)
+    - `sf code-analyzer run --target` on Apex files (cls, trigger, page, component)
 
 ### ESLint Flat Config Structure (`eslint.config.mjs`)
 

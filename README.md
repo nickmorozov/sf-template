@@ -166,7 +166,7 @@ The `.husky/pre-commit` hook runs on every commit:
 
 1. **Branch guard** — blocks commits to `main`, `dev`, `qa`, `uat` (bypass: `ADMIN_OVERRIDE=1`)
 2. **Profile cleanup** — strips non-essential `<userPermissions>` from profile XMLs
-3. **lint-staged** — prettier, eslint, jest (related tests), sf scanner (Apex)
+3. **lint-staged** — prettier, eslint, jest (related tests), sf code-analyzer (Apex)
 
 ## What This Template Does NOT Include
 

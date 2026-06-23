@@ -8,7 +8,9 @@
         "npm": ">=10.x"
     },
     "scripts": {
-        "lint": "eslint **/{aura,lwc}/**/*.js",
+        "lint": "npm run lint:lwc && npm run lint:apex",
+        "lint:lwc": "eslint **/{aura,lwc}/**/*.js",
+        "lint:apex": "sf code-analyzer run --workspace ./src",
         "lint:slds": "npx @salesforce-ux/slds-linter lint \"src\"",
         "lint:slds:fix": "npx @salesforce-ux/slds-linter lint \"src\" --fix",
         "test": "npm run test:unit",
@@ -50,7 +52,7 @@
             "sfdx-lwc-jest -- --bail --findRelatedTests --passWithNoTests"
         ],
         "**/*.{cls,trigger,page,component}": [
-            "sf code-analyzer run --workspace"
+            "sf code-analyzer run --target"
         ]
     },
     "devDependencies": {
