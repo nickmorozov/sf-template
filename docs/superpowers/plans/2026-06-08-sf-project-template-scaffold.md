@@ -42,7 +42,7 @@ These are the substitution sinks. A vendored file is org-neutral when **none** o
 
 ## Prerequisites (MUST be true before Task 12)
 
-- [ ] **P1 — Enriched `sf-template` is pushed.** Plan 1 landed on `sf-template` branch `feature/template-system-v2-spec` (NOT pushed per handoff). Task 12 re-pins `.template` to a GitHub ref. Before Task 12, push that branch (or merge to `main`) on `nickmorozov/sf-template`. Record the ref to pin to (`SF_TEMPLATE_REF`, e.g. `feature/template-system-v2-spec` or `main`).
+- [x] **P1 — Enriched `sf-template` is pushed.** RESOLVED 2026-06-09: `origin/main` had diverged (+16 commits: CI-in-template, a D8 violation), so merge-to-main was rejected. The feature branch (Plan 1 + Tasks 1–2 + this plan doc) was pushed as-is to `origin/feature/template-system-v2-spec` (head `7e37f52`). **`SF_TEMPLATE_REF = feature/template-system-v2-spec`** — Task 12 pins to this, NOT `main`. `main` is untouched; reconciling `origin/main` is a separate deferred decision.
 - [ ] **P2 — Work happens on a feature branch of `sf-project-template`.** `cd /Users/nick/Projects/Job/sf-project-template && git checkout -b feature/scaffold-enrichment` (the scaffold's branch guard blocks direct commits to `main` once synced — use `--no-verify` for the pre-sync commits if needed, or commit before the husky hook is installed).
 
 ---

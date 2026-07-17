@@ -1,0 +1,3 @@
+{
+    "reject": ["@eslint/js", "@types/jest", "eslint", "jest", "stylelint", "stylelint-config-standard"]
+}
